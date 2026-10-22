@@ -6,6 +6,8 @@ import { ProjectImageList } from "@/components/project-page/project-image-list";
 import { ViewToggle } from "@/components/project-page/view-toggle";
 import { AddImagesDialog } from "@/components/project-page/add-images-dialog";
 import VideoUploadStatus from "@/components/project-page/video-upload-status";
+import VideoExportStatus from "@/components/project-page/video-export-status";
+import { VideoExportProvider } from "@/providers/video-export-provider";
 import { Button } from "@/components/ui/button";
 import { Toolbar } from "@/components/toolbar/toolbar";
 import { ShareProjectDialog } from "@/components/projects/share-dialog";
@@ -46,6 +48,7 @@ import { useUpdateSession } from "@/lib/mutations/session";
 import { getErrorMessage } from "@/lib/error-messages";
 import { PresetsDialog } from "@/components/presets/presets-dialog";
 import { AiAssistantDialog } from "@/components/assistant/ai-assistant-dialog";
+import { PROCESSING_FAILED_MESSAGE } from "@/lib/video";
 
 export default function Project({
   params,
@@ -104,6 +107,12 @@ export default function Project({
 
   // se um processamento envolve ferramentas de IA ou não
   const processIsAiRef = useRef<boolean>(false);
+
+  // Vídeo (UC-VID-001): fração de cada passo (vídeo x ferramenta) e passos concluídos
+  const videoStepProgressRef = useRef<Record<string, number>>({});
+  const videoDoneStepsRef = useRef<number>(0);
+
+  const isVideoProject = project.data?.type === "video";
 
   const totalProcessingSteps =
     (project.data?.tools.length ?? 0) * (project.data?.imgs.length ?? 0);
@@ -275,9 +284,64 @@ useEffect(() => {
 }, [socket.data, pid, qc, session.user._id, session.token, ownerId, shareId, toast]);
 
 useEffect(() => {
+  function finishProcessing() {
+    setProcessing(false);
+    if (!isMobile) sidebar.setOpen(true);
+    setProcessingProgress(0);
+    setProcessingSteps(1);
+
+    const params = new URLSearchParams();
+    params.set("mode", "results");
+    params.set("view", "grid");
+
+    const ownerFromQuery = searchParams.get("owner");
+    const shareFromQuery = searchParams.get("share");
+
+    if (ownerFromQuery) params.set("owner", ownerFromQuery);
+    if (shareFromQuery) params.set("share", shareFromQuery);
+
+    router.push(`?${params.toString()}`);
+  }
+
+  function videoProgress() {
+    const fractions = Object.values(videoStepProgressRef.current);
+    const sum = fractions.reduce((a, b) => a + b, 0);
+    const done = Math.max(videoDoneStepsRef.current, sum);
+    return totalProcessingSteps > 0
+      ? Math.min(Math.round((done * 100) / totalProcessingSteps), 100)
+      : 100;
+  }
+
+  // Percentagem do processamento de vídeo, atualizada pela ferramenta (RN3, REQ-VID-TRIM-007)
+  function onProcessProgress(payload: { imgId: string; position: number; progress: number }) {
+    if (ignoreUpdatesRef.current || !processing || !isVideoProject) return;
+    const key = `${payload.imgId}:${payload.position}`;
+    videoStepProgressRef.current[key] = Math.max(
+      videoStepProgressRef.current[key] ?? 0,
+      Number(payload.progress) || 0,
+    );
+    setProcessingProgress(videoProgress());
+  }
+
   function onProcessUpdate(msgId: string) {
     // se já cancelámos ou já não estamos em processamento, ignora tudo
     if (ignoreUpdatesRef.current || !processing) return;
+
+    // Vídeo: cada update é um passo concluído, já com o resultado guardado no servidor
+    if (isVideoProject) {
+      videoDoneStepsRef.current += 1;
+      setProcessingProgress(videoProgress());
+
+      if (videoDoneStepsRef.current >= totalProcessingSteps) {
+        processStartTimeRef.current = null;
+        processIsAiRef.current = false;
+        projectResults.refetch().then(() => {
+          if (ignoreUpdatesRef.current) return;
+          finishProcessing();
+        });
+      }
+      return;
+    }
 
     setProcessingSteps((prev) => {
       const nextSteps = prev + 1;
@@ -395,9 +459,11 @@ useEffect(() => {
     setProcessingSteps(1);
     toast({
       title: "Falha no processamento",
-      description:
-        payload?.error_msg ||
-        "Ocorreu um erro ao processar o projeto. Tenta novamente.",
+      description: isVideoProject
+        ? // Vídeo: mensagem da Exceção 3 do UC-VID-001 (ou o motivo dado pela ferramenta)
+          payload?.error_msg || PROCESSING_FAILED_MESSAGE
+        : payload?.error_msg ||
+          "Ocorreu um erro ao processar o projeto. Tenta novamente.",
       variant: "destructive",
     });
   }
@@ -406,6 +472,7 @@ useEffect(() => {
 
   if (active && socket.data) {
     socket.data.on("process-update", onProcessUpdate);
+    socket.data.on("process-progress", onProcessProgress);
     socket.data.on("process-error", onProcessError);
   }
 
@@ -413,6 +480,7 @@ useEffect(() => {
     active = false;
     if (socket.data) {
       socket.data.off("process-update", onProcessUpdate);
+      socket.data.off("process-progress", onProcessProgress);
       socket.data.off("process-error", onProcessError);
     }
   };
@@ -429,6 +497,8 @@ useEffect(() => {
   projectResults,
   toast,
   processing,
+  isVideoProject,
+  searchParams,
 ]);
 
 if (project.isError) {
@@ -604,6 +674,7 @@ const handleCancel = () => {
       shareId={shareId}
       canEdit={canEdit}
     >
+      <VideoExportProvider projectId={project.data._id} ownerId={ownerId} shareId={shareId}>
       <div className="flex flex-col h-screen relative">
         {/* Barra de aviso quando o link partilhado é revogado */}
         {shareId && shareRevoked && (
@@ -628,8 +699,6 @@ const handleCancel = () => {
                       <div className="flex items-center gap-2 flex-wrap justify-end xl:justify-normal w-full xl:w-auto">
               {mode !== "results" && (
                 <>
-                  {/* Ainda não há ferramentas de edição de vídeo */}
-                  {!isVideo && (
                   <Button
                     disabled={
                       !canEdit ||
@@ -640,6 +709,9 @@ const handleCancel = () => {
                     onClick={() => {
                       // começa a contar o tempo
                       processStartTimeRef.current = performance.now();
+                      videoStepProgressRef.current = {};
+                      videoDoneStepsRef.current = 0;
+                      setProcessingProgress(0);
                       setProcessing(true);        
                       sidebar.setOpen(false);
                       
@@ -703,7 +775,6 @@ const handleCancel = () => {
                   >
                     <Play /> Apply
                   </Button>
-                  )}
 
           {canEdit && !isVideo && (
             <>
@@ -790,6 +861,8 @@ const handleCancel = () => {
                             : "Download results (ZIP)"}
                         </DropdownMenuItem>
 
+                          {/* PDF só faz sentido para imagens */}
+                          {!isVideo && (
                           <DropdownMenuItem
                             onClick={() => {
                               downloadProjectPdf.mutate(
@@ -820,6 +893,7 @@ const handleCancel = () => {
                               ? "Download results (PDF)"
                               : "Download images (PDF)"}
                         </DropdownMenuItem>
+                          )}
                       </DropdownMenuContent>
                     </DropdownMenu>
 
@@ -833,10 +907,13 @@ const handleCancel = () => {
         {/* Progresso do upload de vídeos (UC-VID-005) */}
         {isVideo && <VideoUploadStatus projectId={project.data._id} />}
 
+        {/* Progresso das exportações de vídeo (UC-VID-002) */}
+        {isVideo && <VideoExportStatus />}
+
         {/* Main Content */}
 
         <div className="h-full overflow-x-hidden flex">
-        {!isVideo && <Toolbar />}
+        <Toolbar />
         <ProjectImageList
           setCurrentImageId={setCurrentImage}
           results={projectResults.data}
@@ -859,6 +936,9 @@ const handleCancel = () => {
               <LoaderCircle className="size-[1em] animate-spin" />
             </div>
             <Progress value={processingProgress} className="w-96" />
+            {isVideo && (
+              <span className="text-sm text-muted-foreground">{processingProgress}%</span>
+            )}
 
             <Button
               variant="outline"
@@ -874,6 +954,7 @@ const handleCancel = () => {
           </Card>
         </div>
       </Transition>
+      </VideoExportProvider>
     </ProjectProvider>
   );
 }

@@ -37,6 +37,12 @@ export interface SaturationToolParams {
   saturationFactor: number; // 0.0 - 2.0 (1.0 normal image)
 }
 
+// Recorte temporal de vídeo (UC-VID-001): instantes no formato hh:mm:ss
+export interface TrimToolParams {
+  start: string;
+  end: string;
+}
+
 export type ExpandMode = "reflect" | "edge" | "solid" | "generative";
 
 export type ExpandAiParams = {
@@ -72,6 +78,7 @@ export type ToolParams =
   | RotateToolParams
   | SaturationToolParams
   | ExpandAiParams
+  | TrimToolParams
   | object;
 
 export type ToolNames =
@@ -92,4 +99,5 @@ export type ToolNames =
   | "obj_ai"
   | "people_ai"
   | "expand_ai"
+  | "trim"
   | "project";

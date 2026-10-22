@@ -259,6 +259,78 @@ router.post("/:user/:project/video/zip", auth.checkToken, (req, res) => {
   proxyUpload(req, res, `${ownerId}/${req.params.project}/video/zip`);
 });
 
+// Pedidos de exportação (UC-VID-002): mesmos headers/params que as restantes rotas
+function exportRequestConfig(req) {
+  return {
+    httpsAgent,
+    params: req.query.share ? { share: req.query.share } : undefined,
+    headers: {
+      Authorization: req.headers["authorization"],
+      "X-Caller-Id": req.authUserId || req.params.user,
+    },
+  };
+}
+
+/**
+ * Exportar um vídeo processado
+ * @returns { exportId, status: "done" | "processing", fileName }
+ */
+router.post("/:user/:project/export/:img", auth.checkToken, (req, res) => {
+  const ownerId = req.query.owner || req.params.user;
+  axios
+    .post(
+      projectsURL + `${ownerId}/${req.params.project}/export/${req.params.img}`,
+      {},
+      exportRequestConfig(req),
+    )
+    .then((resp) => res.status(resp.status).jsonp(resp.data))
+    .catch((err) => forwardAxiosError(res, err, "Error exporting video"));
+});
+
+/**
+ * Cancelar uma exportação em curso
+ */
+router.delete("/:user/:project/export/:exportId", auth.checkToken, (req, res) => {
+  const ownerId = req.query.owner || req.params.user;
+  axios
+    .delete(
+      projectsURL + `${ownerId}/${req.params.project}/export/${req.params.exportId}`,
+      exportRequestConfig(req),
+    )
+    .then(() => res.sendStatus(204))
+    .catch((err) => forwardAxiosError(res, err, "Error cancelling export"));
+});
+
+/**
+ * URL de descarga de um ficheiro exportado (regista a exportação no histórico)
+ * @returns { url, fileName }
+ */
+router.get("/:user/:project/export/:exportId/download", auth.checkToken, (req, res) => {
+  const ownerId = req.query.owner || req.params.user;
+  axios
+    .get(
+      projectsURL + `${ownerId}/${req.params.project}/export/${req.params.exportId}/download`,
+      exportRequestConfig(req),
+    )
+    .then((resp) => res.status(200).jsonp(resp.data))
+    .catch((err) => forwardAxiosError(res, err, "Error downloading export"));
+});
+
+/**
+ * Histórico de exportações de um vídeo
+ * @returns [{ exportedAt, fileName }]
+ */
+router.get("/:user/:project/export/:img/history", auth.checkToken, (req, res) => {
+  const ownerId = req.query.owner || req.params.user;
+  axios
+    .get(
+      projectsURL + `${ownerId}/${req.params.project}/export/${req.params.img}/history`,
+      exportRequestConfig(req),
+    )
+    .then((resp) => res.status(200).jsonp(resp.data))
+    .catch((err) => forwardAxiosError(res, err, "Error acquiring export history"));
+});
+
 // ================== FIM VÍDEO ==================
 
 /**

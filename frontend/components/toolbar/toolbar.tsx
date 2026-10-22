@@ -31,6 +31,7 @@ import {
 import { Eraser } from "lucide-react";
 import { useState } from "react";
 import ExpandAITool from "./expand-ai-tool";
+import TrimTool from "./trim-tool";
 
 export function Toolbar() {
   const searchParams = useSearchParams();
@@ -59,6 +60,11 @@ export function Toolbar() {
     <div className="flex h-full w-24 flex-col justify-between items-stretch border-r bg-background p-2">
       <div className="flex flex-col gap-2 items-center">
         <span className="text-sm text-gray-500">Tools</span>
+        {project.type === "video" ? (
+          // Ferramentas de vídeo (UC-VID-001)
+          <TrimTool disabled={disabled} />
+        ) : (
+          <>
         <BrightnessTool disabled={disabled} />
         <ContrastTool disabled={disabled} />
         <SaturationTool disabled={disabled} />
@@ -75,6 +81,8 @@ export function Toolbar() {
         <TextAITool disabled={disabled} />
         <ExpandAITool disabled={disabled} />
         <UpgradeAITool disabled={disabled} />
+          </>
+        )}
         <AppliedToolsList />
       </div>
       <Dialog open={open} onOpenChange={setOpen}>

@@ -7,6 +7,7 @@ const mongoose = require("mongoose");
 
 const { router: projectsRouter, process_msg } = require("./routes/projects");
 const { router: videosRouter, startVideoCleanup } = require("./routes/videos");
+const { router: exportsRouter } = require("./routes/exports");
 
 // Run Docker
 const mongoDB = "mongodb://projects_mongoDB:27018/project";
@@ -34,6 +35,7 @@ app.use(express.static(path.join(__dirname, "public")));
 
 // Rotas de vídeo primeiro: GET /:user/storage não pode cair em GET /:user/:project
 app.use("/", videosRouter);
+app.use("/", exportsRouter);
 app.use("/", projectsRouter);
 
 // Start the message processing

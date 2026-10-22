@@ -66,7 +66,8 @@ export function AppliedToolsList() {
   const tools = project.tools;
 
   const currentImage = useCurrentImage();
-  const imageId = currentImage?._id;
+  // A pré-visualização não existe para vídeos (UC-VID-001)
+  const imageId = project.type === "video" ? undefined : currentImage?._id;
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 

@@ -114,6 +114,43 @@ export async function normalizeDroppedFiles(
   });
 }
 
+// ================== TRIM (UC-VID-001) ==================
+
+export const TRIM_TOO_SHORT_MESSAGE = "O vídeo é demasiado curto para esta operação";
+export const PROCESSING_FAILED_MESSAGE =
+  "Ocorreu um erro durante o processamento. Tente novamente.";
+
+const TIME_RE = /^(\d{2}):([0-5]\d):([0-5]\d)$/;
+
+// "hh:mm:ss" -> segundos, ou null se não estiver no formato (RN1)
+export function parseTime(value: string): number | null {
+  const m = TIME_RE.exec(value.trim());
+  if (!m) return null;
+  return Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]);
+}
+
+// segundos -> "hh:mm:ss"
+export function formatTime(seconds: number): string {
+  const s = Math.max(0, Math.floor(seconds));
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${pad(Math.floor(s / 3600))}:${pad(Math.floor((s % 3600) / 60))}:${pad(s % 60)}`;
+}
+
+/**
+ * Valida os instantes do recorte face à duração do vídeo (RN1, RN2, FA1).
+ * @returns mensagem de erro, ou null se forem válidos
+ */
+export function validateTrim(start: string, end: string, duration?: number): string | null {
+  const s = parseTime(start);
+  const e = parseTime(end);
+  if (s === null || e === null)
+    return "Os instantes do recorte devem estar no formato hh:mm:ss.";
+  if (s >= e) return "O instante inicial deve ser menor do que o instante final.";
+  if (duration !== undefined && e > duration)
+    return "Os instantes do recorte devem estar dentro da duração do vídeo.";
+  return null;
+}
+
 export function formatBytes(bytes: number) {
   const MB = 1024 * 1024;
   const GB = 1024 * MB;
@@ -233,4 +270,76 @@ export const sendSessionHeartbeat = async (uid: string, token: string) => {
     {},
     { headers: { Authorization: `Bearer ${token}` } },
   );
+};
+
+// ================== EXPORT (UC-VID-002) ==================
+
+export const EXPORT_FAILED_MESSAGE =
+  "Não foi possível exportar este vídeo. Tente novamente.";
+
+export interface VideoExportStart {
+  exportId: string;
+  status: "done" | "processing";
+  fileName: string;
+}
+
+export interface VideoExportUpdate {
+  exportId: string;
+  imgId: string;
+  fileName: string;
+  status: "progress" | "done" | "error";
+  progress?: number; // 0-100
+  message?: string;
+}
+
+export interface VideoExportHistoryEntry {
+  exportedAt: string;
+  fileName: string;
+}
+
+interface ExportTarget {
+  uid: string;
+  pid: string;
+  token: string;
+  ownerId?: string;
+  shareId?: string;
+}
+
+// Projetos partilhados: o caminho usa o dono e o share vai na query (como em lib/projects)
+function exportUrl({ uid, pid, ownerId, shareId }: ExportTarget, suffix: string) {
+  const query = shareId
+    ? `?${new URLSearchParams({ ...(ownerId ? { owner: ownerId } : {}), share: shareId })}`
+    : "";
+  return `/projects/${shareId && ownerId ? ownerId : uid}/${pid}/export/${suffix}${query}`;
+}
+
+const authHeaders = (token: string) => ({ headers: { Authorization: `Bearer ${token}` } });
+
+export const startVideoExport = async (target: ExportTarget & { imgId: string }) => {
+  const response = await api.post<VideoExportStart>(
+    exportUrl(target, target.imgId),
+    {},
+    authHeaders(target.token),
+  );
+  return response.data;
+};
+
+export const cancelVideoExport = async (target: ExportTarget & { exportId: string }) => {
+  await api.delete(exportUrl(target, target.exportId), authHeaders(target.token));
+};
+
+export const getVideoExportDownload = async (target: ExportTarget & { exportId: string }) => {
+  const response = await api.get<{ url: string; fileName: string }>(
+    exportUrl(target, `${target.exportId}/download`),
+    authHeaders(target.token),
+  );
+  return response.data;
+};
+
+export const fetchVideoExportHistory = async (target: ExportTarget & { imgId: string }) => {
+  const response = await api.get<VideoExportHistoryEntry[]>(
+    exportUrl(target, `${target.imgId}/history`),
+    authHeaders(target.token),
+  );
+  return response.data;
 };

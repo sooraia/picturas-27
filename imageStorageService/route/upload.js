@@ -15,7 +15,7 @@ router.post(
 
     if (!allowedStages.includes(stage)) {
       return res.status(400).json({
-        error: "O estágio deve ser src, preview, preview_cache ou out.",
+        error: "O estágio deve ser src, preview, preview_cache, out ou export.",
       });
     }
 

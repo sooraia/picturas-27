@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 import { Card } from "@/components/ui/card";
-import { Download, Film, Trash } from "lucide-react";
+import { Download, FileOutput, Film, History, Trash } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -29,6 +29,8 @@ import { useToast } from "@/hooks/use-toast";
 import type { ProjectImage } from "@/lib/projects";
 import { useSearchParams } from "next/navigation";
 import { getErrorMessage } from "@/lib/error-messages";
+import { useVideoExports } from "@/providers/video-export-provider";
+import VideoExportHistoryDialog from "./video-export-history-dialog";
 
 interface ImageItemProps {
   image: ProjectImage;
@@ -41,6 +43,12 @@ export function ProjectImage({ image, animation = true }: ImageItemProps) {
 
   const [loaded, setLoaded] = useState<boolean>(false);
   const [open, setOpen] = useState<boolean>(false);
+  const [historyOpen, setHistoryOpen] = useState<boolean>(false);
+
+  // Exportar só existe para vídeos processados, que são os do modo results (RN1)
+  const videoExports = useVideoExports();
+  const canExport = mode === "results" && image.media_type === "video";
+  const exporting = !!videoExports.exports[image._id];
 
   const { _id: pid, version } = useProjectInfo();
   const session = useSession();
@@ -79,6 +87,16 @@ export function ProjectImage({ image, animation = true }: ImageItemProps) {
                 />
                 {animation && (
                   <Film className="row-start-1 col-start-1 z-40 m-2 size-5 text-white drop-shadow" />
+                )}
+                {canExport && !animation && (
+                  <Button
+                    size="sm"
+                    className="row-start-1 col-start-1 z-40 m-2 justify-self-end self-start"
+                    disabled={exporting}
+                    onClick={() => videoExports.startExport(image)}
+                  >
+                    <FileOutput /> Exportar
+                  </Button>
                 )}
                 {!loaded && (
                   <Skeleton className="size-full row-start-1 col-start-1 z-50" />
@@ -131,6 +149,31 @@ export function ProjectImage({ image, animation = true }: ImageItemProps) {
               </ContextMenuItem>
             )}
           </DialogTrigger>
+          {canExport ? (
+            <>
+              <ContextMenuItem
+                className="flex justify-between"
+                disabled={exporting}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  videoExports.startExport(image);
+                }}
+              >
+                <span>Exportar</span>
+                <FileOutput className="size-4" />
+              </ContextMenuItem>
+              <ContextMenuItem
+                className="flex justify-between"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setHistoryOpen(true);
+                }}
+              >
+                <span>Histórico de exportações</span>
+                <History className="size-4" />
+              </ContextMenuItem>
+            </>
+          ) : (
           <ContextMenuItem
             className="flex justify-between"
             onClick={(e) => {
@@ -161,8 +204,12 @@ export function ProjectImage({ image, animation = true }: ImageItemProps) {
             <span>Download</span>
             <Download className="size-4" />
           </ContextMenuItem>
+          )}
         </ContextMenuContent>
       </ContextMenu>
+      {canExport && (
+        <VideoExportHistoryDialog image={image} open={historyOpen} setOpen={setHistoryOpen} />
+      )}
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Are you sure?</DialogTitle>

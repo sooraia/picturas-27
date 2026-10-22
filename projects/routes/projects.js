@@ -19,6 +19,7 @@ const { v4: uuidv4 } = require('uuid');
 const {
   send_msg_tool,
   send_msg_client,
+  send_msg_client_progress,
   send_msg_client_error,
   send_msg_client_preview,
   send_msg_client_preview_error,
@@ -41,9 +42,19 @@ const {
   get_image_internal_url,
   get_image_public_url,
   post_image,
+  post_file_stream,
   delete_image,
   copy_image,
 } = require("../utils/imageStorage");
+
+const {
+  VIDEO_TOOLS,
+  MSG_TOO_SHORT,
+  validateTrimParams,
+  orderVideoTools,
+  signalCancel,
+} = require("../utils/videoTools");
+const { deleteProjectExports } = require("./exports");
 
 const {
   checkSharePermission,
@@ -148,6 +159,17 @@ function toolsEqual(a, b) {
 }
 
 
+// Valida o Trim face aos vídeos do projeto. A interface valida contra o vídeo
+// selecionado; aqui basta que o intervalo caiba no vídeo mais longo (cada vídeo
+// é recortado até à sua própria duração pela ferramenta).
+function validateTrimForProject(project, params) {
+  const durations = (project?.imgs || [])
+    .map((i) => Number(i.duration))
+    .filter((d) => Number.isFinite(d));
+  if (durations.length > 0 && Math.max(...durations) < 1) return MSG_TOO_SHORT;
+  return validateTrimParams(params, durations.length > 0 ? Math.max(...durations) : undefined);
+}
+
 // TODO process message according to type of output
 function process_msg() {
   read_msg(async (msg) => {
@@ -182,6 +204,21 @@ function process_msg() {
       // Get current process, delete it and create it's sucessor if possible
       const og_img_uri = process.og_img_uri;
       const img_id = process.img_id;
+
+      // Progresso intermédio de uma ferramenta de vídeo (UC-VID-001, RN3): o pedido
+      // continua em curso, por isso o Process não é apagado
+      if (msg_content.status === "progress") {
+        const project = await Project.getOne(process.user_id, process.project_id);
+        if (!project || (project.activeToken || 0) !== (process.token || 0)) return;
+
+        send_msg_client_progress(
+          `update-client-progress-${uuidv4()}`,
+          timestamp,
+          runnerId,
+          { imgId: String(img_id), position: process.cur_pos, progress: msg_content.progress }
+        );
+        return;
+      }
       
       await Process.delete(process.user_id, process.project_id, process._id);
       
@@ -197,7 +234,7 @@ function process_msg() {
             timestamp,
             runnerId,   
             msg_content.error.code,
-            msg_content.error.msg
+            msg_content.error.message ?? msg_content.error.msg
           );
         }
         return;
@@ -337,32 +374,53 @@ if (/preview/.test(msg_id) && (type == "text" || next_pos >= project.tools.lengt
 
       if(/preview/.test(msg_id) && next_pos >= project.tools.length) return;
 
-      if (!/preview/.test(msg_id))
+      const is_final_step = type == "text" || next_pos >= project.tools.length;
+
+      // Vídeo: o último passo só é notificado depois de o resultado estar guardado
+      // e a execução commitada, para o modo results já o encontrar (UC-VID-001, Passo 8)
+      const notify_after_commit = type == "video" && is_final_step;
+
+      if (!/preview/.test(msg_id) && !notify_after_commit)
         send_msg_client(
           user_msg_id,
           timestamp,
           runnerId
         );
 
-      if (!/preview/.test(msg_id) && (type == "text" || next_pos >= project.tools.length)) {
+      if (!/preview/.test(msg_id) && is_final_step) {
         const file_path = path.join(__dirname, `/../${output_file_uri}`);
         const file_name = path.basename(file_path);
-        const fileStream = fs.createReadStream(file_path); // Use createReadStream for efficiency
 
-        const data = new FormData();
-        await data.append(
-          "file",
-          fileStream,
-          path.basename(file_path),
-          mime.lookup(file_path)
-        );
+        let resp;
+        if (type == "video") {
+          // vídeos podem ter vários GB: enviados por stream, sem multipart
+          const ext = path.extname(file_path).slice(1).toLowerCase();
+          resp = await post_file_stream(
+            process.user_id,
+            process.project_id,
+            "out",
+            file_path,
+            ext,
+            mime.lookup(file_path) || "application/octet-stream"
+          );
+        } else {
+          const fileStream = fs.createReadStream(file_path); // Use createReadStream for efficiency
 
-        const resp = await post_image(
-          process.user_id,
-          process.project_id,
-          "out",
-          data
-        );
+          const data = new FormData();
+          await data.append(
+            "file",
+            fileStream,
+            path.basename(file_path),
+            mime.lookup(file_path)
+          );
+
+          resp = await post_image(
+            process.user_id,
+            process.project_id,
+            "out",
+            data
+          );
+        }
 
         const og_key_tmp = resp.data.data.imageKey.split("/");
         const og_key = og_key_tmp[og_key_tmp.length - 1];
@@ -375,6 +433,7 @@ if (/preview/.test(msg_id) && (type == "text" || next_pos >= project.tools.lengt
           project_id: process.project_id,
           user_id: process.user_id,
           token: process.token || 0, 
+          size: fs.statSync(file_path).size,
         };
 
         await Result.create(result);
@@ -426,6 +485,13 @@ if (/preview/.test(msg_id) && (type == "text" || next_pos >= project.tools.lengt
             );
           }
         }
+
+        if (notify_after_commit)
+          send_msg_client(
+            user_msg_id,
+            timestamp,
+            runnerId
+          );
       }
 
       if (next_pos >= project.tools.length) return;
@@ -509,6 +575,9 @@ async function deleteProjectAndResources(userId, projectId) {
     await delete_image(userId, projectId, "preview", p.img_key);
     await Preview.delete(p.user_id, p.project_id, p.img_id);
   }
+
+  // apagar ficheiros exportados (vídeo)
+  await deleteProjectExports(userId, projectId);
 
   // apagar o próprio projeto
   await Project.delete(userId, projectId);
@@ -835,6 +904,7 @@ router.get("/:user/:project", checkSharePermission, async (req, res, next) => {
             name: path.basename(img.og_uri),
             url: url,
             media_type: img.media_type,
+            duration: img.duration,
           });
         } catch (_) {
           res.status(404).jsonp(`Error acquiring image's url`);
@@ -981,7 +1051,13 @@ router.get("/:user/:project/process/url", checkSharePermission, async (req, res)
       const url = resp.data.url;
 
       if (r.type === "text") ans.texts.push({ og_img_id: r.img_id, name: r.file_name, url });
-      else ans.imgs.push({ og_img_id: r.img_id, name: r.file_name, url });
+      else
+        ans.imgs.push({
+          og_img_id: r.img_id,
+          name: r.file_name,
+          url,
+          media_type: r.type === "video" ? "video" : "image",
+        });
     }
 
     return res.status(200).jsonp(ans);
@@ -1026,6 +1102,11 @@ router.post("/:user/:project/preview/:img", checkSharePermission, requireEditPer
     .then(async (project) => {
       if (project.tools.length === 0) {
         return res.status(400).jsonp("No tools selected");
+      }
+
+      // A pré-visualização é só para imagens; nos vídeos o resultado aparece no modo results
+      if (project.type === "video") {
+        return res.status(400).jsonp("A pré-visualização não está disponível para vídeos.");
       }
 
       const tool = project.tools.filter((t) => t.position == 0)[0];
@@ -1270,11 +1351,22 @@ router.post("/:user/:project/tool", checkSharePermission, requireEditPermission,
     return;
   }
 
-  // Ainda não existem ferramentas de edição de vídeo
-  if (req.projectDoc?.type === "video") {
+  // Projetos de vídeo só aceitam ferramentas de vídeo, e vice-versa (UC-VID-001)
+  const isVideoProject = req.projectDoc?.type === "video";
+  const isVideoTool = VIDEO_TOOLS.includes(req.body.procedure);
+  if (isVideoProject !== isVideoTool) {
     return res
       .status(400)
-      .jsonp("Ainda não existem ferramentas de edição para projetos de vídeo.");
+      .jsonp(
+        isVideoProject
+          ? "Esta ferramenta não está disponível para projetos de vídeo."
+          : "Esta ferramenta só está disponível para projetos de vídeo."
+      );
+  }
+
+  if (req.body.procedure === "trim") {
+    const error = validateTrimForProject(req.projectDoc, req.body.params);
+    if (error) return res.status(400).jsonp(error);
   }
 
   let required_types = ["free", "premium"];
@@ -1296,7 +1388,16 @@ router.post("/:user/:project/tool", checkSharePermission, requireEditPermission,
       Project.getOne(req.params.user, req.params.project)
         .then(async (project) => {
           const tool = { position: project.tools.length, ...req.body };
-          project.tools.push(tool);
+
+          if (isVideoProject) {
+            // Um único Trim por projeto, sempre o primeiro da pipeline (RN7)
+            if (tool.procedure === "trim" && project.tools.some((t) => t.procedure === "trim")) {
+              return res.status(409).jsonp("O projeto já tem um recorte definido.");
+            }
+            project.tools = orderVideoTools([...project.tools, tool]);
+          } else {
+            project.tools.push(tool);
+          }
 
           const updated = await Project.updateIfVersion(
             req.params.user,
@@ -1354,6 +1455,9 @@ router.post(
             ...t,
           });
         }
+
+        // O Trim nunca sai da primeira posição (RN7)
+        if (project.type === "video") project.tools = orderVideoTools(project.tools);
 
         const updated = await Project.updateIfVersion(
           req.params.user,
@@ -1416,6 +1520,9 @@ router.post("/:user/:project/process", checkSharePermission, requireEditPermissi
         res.status(400).jsonp("No tools selected");
         return;
       }
+
+      // Vídeo: o Trim é executado antes das restantes ferramentas (RN7, FA2)
+      if (project.type === "video") project.tools = orderVideoTools(project.tools);
 
       const { adv_ops, totalAdv, charged, newTools } = advanced_tool_num(project);
 
@@ -1715,6 +1822,11 @@ router.put(
           const tool_pos = project.tools.findIndex((i) => i._id == req.params.tool);
           const prev_tool = project.tools[tool_pos];
 
+          if (prev_tool?.procedure === "trim") {
+            const error = validateTrimForProject(project, req.body.params);
+            if (error) return res.status(400).jsonp(error);
+          }
+
           project.tools[tool_pos] = {
             position: prev_tool.position,
             procedure: prev_tool.procedure,
@@ -1950,6 +2062,7 @@ router.delete(
         // 1) apagar processos em curso para evitar resultados "tardios"
         try {
           const processes = await Process.getProject(req.params.user, req.params.project);
+          if (project.type === "video") signalCancel(processes);
           if (processes && processes.length > 0) {
             for (const p of processes) {
               await Process.delete(p.user_id, p.project_id, p._id);
@@ -2185,6 +2298,10 @@ router.delete(
 
       // limpar processos em curso
       const processes = await Process.getProject(ownerId, projectId);
+
+      // As ferramentas de vídeo interrompem o processamento em curso (UC-VID-001, RN5)
+      if (project.type === "video") signalCancel(processes);
+
       for (const p of (processes || [])) {
         await Process.delete(p.user_id, p.project_id, p._id);
       }

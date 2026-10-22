@@ -41,6 +41,7 @@ export interface ProjectImage {
   name: string;
   url: string;
   media_type?: "image" | "video";
+  duration?: number; // segundos (vídeos)
 }
 
 export interface ProjectImageText {
@@ -831,6 +832,7 @@ export const fetchProjectResults = async (
       og_img_id: string;
       name: string;
       url: string;
+      media_type?: "image" | "video";
     }[];
     texts: {
       og_img_id: string;
@@ -869,6 +871,7 @@ export const fetchProjectResults = async (
           _id: img.og_img_id,
           name: img.name,
           url: img.url,
+          media_type: img.media_type,
         }) as ProjectImage,
     ),
     texts: texts,
