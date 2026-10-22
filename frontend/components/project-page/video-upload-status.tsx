@@ -1,7 +1,7 @@
 "use client";
 
 // Progresso das transferências de vídeo de um projeto, com opção de cancelar
-// (UC-VID-005, Passo 4, REQ-VID-UP-003/004/011)
+// (UC-VID-005, Passo 5, REQ-VID-UP-003/004/010)
 
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";

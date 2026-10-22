@@ -1,45 +1,37 @@
-// Limites de upload de vídeo por perfil (UC-VID-005, RN1, RN2, RN5, A3).
-// Os valores são uma proposta para o MVP e podem ser ajustados aqui sem
-// tocar no resto do código.
+// Limites de upload de vídeo por perfil (UC-VID-005, RN1, RN2, A3).
+// Valores definidos nos requisitos REQ-VID-UP-002, REQ-VID-UP-005 e REQ-VID-UP-016.
 
 const MB = 1024 * 1024;
 const GB = 1024 * MB;
 
-// Extensões aceites na seleção; o formato real é confirmado com ffprobe
-const VIDEO_EXTENSIONS = [".mp4", ".mov", ".webm", ".mkv"];
+// Extensões aceites na seleção (REQ-VID-UP-015); o formato real é confirmado com ffprobe
+const VIDEO_EXTENSIONS = [".mp4", ".mov"];
 const IMAGE_EXTENSIONS = [".png", ".jpg", ".jpeg"];
 
-// Nomes de container devolvidos pelo ffprobe (format_name) e codecs suportados
-const VIDEO_CONTAINERS = ["mov", "mp4", "matroska", "webm"];
-const VIDEO_CODECS = ["h264", "hevc", "vp8", "vp9", "av1"];
+// Nomes de container devolvidos pelo ffprobe (format_name) e codecs suportados:
+// MP4 e MOV com codec H.264 (REQ-VID-UP-005)
+const VIDEO_CONTAINERS = ["mov", "mp4"];
+const VIDEO_CODECS = ["h264"];
 
-// Tamanho máximo de um .zip, para evitar sobrecarga na descompactação (Q2)
-const MAX_ZIP_SIZE = 4 * GB;
+// Resolução máxima: 1080p, igual para todos os perfis (REQ-VID-UP-005)
+const MAX_WIDTH = 1920;
+const MAX_HEIGHT = 1080;
 
 const PROFILES = {
   anonymous: {
-    maxFileSize: 100 * MB,
-    maxDuration: 60, // segundos
-    maxWidth: 1280,
-    maxHeight: 720,
-    storageQuota: 500 * MB,
-    zipAllowed: false,
+    maxFileSize: 200 * MB,
+    maxDuration: 5 * 60, // segundos
+    storageQuota: 200 * MB,
   },
   free: {
     maxFileSize: 500 * MB,
-    maxDuration: 5 * 60,
-    maxWidth: 1920,
-    maxHeight: 1080,
+    maxDuration: 10 * 60,
     storageQuota: 2 * GB,
-    zipAllowed: true,
   },
   premium: {
     maxFileSize: 2 * GB,
     maxDuration: 30 * 60,
-    maxWidth: 3840,
-    maxHeight: 2160,
-    storageQuota: 20 * GB,
-    zipAllowed: true,
+    storageQuota: 10 * GB,
   },
 };
 
@@ -47,7 +39,8 @@ function getVideoLimits(userType) {
   const profile = PROFILES[userType] || PROFILES.anonymous;
   return {
     ...profile,
-    maxZipSize: MAX_ZIP_SIZE,
+    maxWidth: MAX_WIDTH,
+    maxHeight: MAX_HEIGHT,
     extensions: VIDEO_EXTENSIONS,
     containers: VIDEO_CONTAINERS,
     codecs: VIDEO_CODECS,

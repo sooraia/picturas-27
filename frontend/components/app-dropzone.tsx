@@ -3,6 +3,7 @@
 import { useToast } from "@/hooks/use-toast";
 import React, { useState } from "react";
 import Dropzone from "react-dropzone";
+import { UNSUPPORTED_FORMAT_MESSAGE } from "@/lib/video";
 
 interface CustomDropzoneProps {
   onDrop: (acceptedFiles: File[]) => void;
@@ -22,10 +23,11 @@ export default function AppDropzone({ onDrop, children }: CustomDropzoneProps) {
         onDropAccepted={() => setIsDragging(false)}
         onDropRejected={() => {
           setIsDragging(false);
+          // Extensões fora da lista não chegam a ser transferidas (REQ-VID-UP-015)
           toast({
-            title: "Invalid file type!",
+            title: UNSUPPORTED_FORMAT_MESSAGE,
             description:
-              "Please upload a .png, .jpeg, .jpg, .mp4, .mov, .webm, .mkv or .zip file",
+              "Formatos aceites: .png, .jpeg, .jpg, .mp4, .mov ou .zip.",
             variant: "destructive",
           });
         }}
@@ -38,8 +40,6 @@ export default function AppDropzone({ onDrop, children }: CustomDropzoneProps) {
           // Vídeo (UC-VID-005)
           "video/mp4": [".mp4"],
           "video/quicktime": [".mov"],
-          "video/webm": [".webm"],
-          "video/x-matroska": [".mkv"],
         }}
       >
         {({ getRootProps, getInputProps }) => (

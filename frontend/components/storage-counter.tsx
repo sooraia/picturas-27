@@ -1,6 +1,6 @@
 "use client";
 
-// Espaço ocupado na quota de armazenamento do perfil (UC-VID-005, REQ-VID-UP-008)
+// Espaço ocupado na quota de armazenamento do perfil (UC-VID-005, REQ-VID-UP-007)
 
 import { useSession } from "@/providers/session-provider";
 import { useGetStorage } from "@/lib/queries/projects";

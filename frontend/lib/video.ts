@@ -6,10 +6,11 @@ import { api } from "./axios";
 import { extractZipImages } from "./utils";
 import type { SingleProject } from "./projects";
 
-export const VIDEO_EXTENSIONS = [".mp4", ".mov", ".webm", ".mkv"];
+export const VIDEO_EXTENSIONS = [".mp4", ".mov"];
 export const IMAGE_EXTENSIONS = [".png", ".jpg", ".jpeg"];
 
 export const MIXED_MEDIA_MESSAGE = "Um projeto só pode conter imagens ou vídeos.";
+export const UNSUPPORTED_FORMAT_MESSAGE = "Formato ou codec de vídeo não suportado.";
 export const TRANSFER_FAILED_MESSAGE =
   "Falha na transferência do vídeo. Tente novamente.";
 
@@ -131,8 +132,6 @@ export interface StorageInfo {
     maxDuration: number;
     maxWidth: number;
     maxHeight: number;
-    maxZipSize: number;
-    zipAllowed: boolean;
     extensions: string[];
   };
 }
@@ -153,7 +152,7 @@ export const fetchStorage = async (uid: string, token: string) => {
 
 /**
  * Cria o projeto de vídeo vazio. O servidor faz a validação preliminar
- * (nome, extensões, tamanhos, quota, .zip só com conta) antes de o criar.
+ * (extensões, tamanhos, quota, mistura de imagens e vídeos) antes de o criar.
  */
 export const createVideoProject = async ({
   uid,

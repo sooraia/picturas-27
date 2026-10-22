@@ -1,4 +1,4 @@
-// Validação de vídeos no servidor depois da transferência (UC-VID-005, Passo 5, A4):
+// Validação de vídeos no servidor depois da transferência (UC-VID-005, Passo 6, A4):
 // integridade, formato real, codec, duração e resolução, através do ffprobe.
 const { execFile } = require("child_process");
 const { formatDuration } = require("./videoLimits");

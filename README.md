@@ -56,7 +56,15 @@ PictuRAS is a web-based image editing platform that combines traditional image p
 - **Video Upload** (UC-VID-005): create video projects from one or more videos or a `.zip`
   batch, with upload progress and cancel, server-side validation (`ffprobe`: integrity,
   format, codec, duration, resolution), per-profile limits and storage quota. Limits live in
-  `projects/utils/videoLimits.js`. There are no video editing tools yet.
+  `projects/utils/videoLimits.js`:
+
+  | Profile   | Max file / `.zip` | Max duration | Storage quota |
+  | --------- | ----------------- | ------------ | ------------- |
+  | Anonymous | 200 MB            | 5 min        | 200 MB        |
+  | Free      | 500 MB            | 10 min       | 2 GB          |
+  | Premium   | 2 GB              | 30 min       | 10 GB         |
+
+  All profiles: MP4 or MOV with H.264, up to 1080p. There are no video editing tools yet.
 - **Real-time Processing**: WebSocket-based progress updates while tools run
 - **Encrypted object storage**: SeaweedFS S3 with encryption at rest
 - **Automated backups**: periodic `mongodump` of all three databases

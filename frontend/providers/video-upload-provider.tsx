@@ -1,6 +1,6 @@
 "use client";
 
-// Estado das transferências de vídeo (UC-VID-005, Passos 4 a 6).
+// Estado das transferências de vídeo (UC-VID-005, Passos 5 a 7).
 // Vive no layout do dashboard para que o progresso continue visível ao
 // navegar entre a lista de projetos e a página do projeto.
 

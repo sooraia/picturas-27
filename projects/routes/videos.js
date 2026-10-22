@@ -40,28 +40,24 @@ const users_ms = "https://users:10001/";
 const MSG_MIXED = "Um projeto só pode conter imagens ou vídeos.";
 const MSG_QUOTA = "Espaço livre insuficiente na biblioteca.";
 const MSG_TRANSFER = "Falha na transferência do vídeo. Tente novamente.";
-const MSG_ZIP_ACCOUNT =
-  "O carregamento em lote (.zip) está disponível apenas para utilizadores com conta.";
-const MSG_DUPLICATE = "Já existe um vídeo com esse nome no projeto.";
 const MSG_ZIP_UNREADABLE = "Não foi possível ler o ficheiro .zip.";
 const MSG_ZIP_EMPTY = "O ficheiro .zip não contém vídeos.";
 
 const msgTooBig = (limits) =>
   `O vídeo excede o tamanho máximo permitido para o seu perfil (${formatBytes(limits.maxFileSize)}).`;
+// O .zip está sujeito ao mesmo limite de tamanho de ficheiro do perfil (Q2)
 const msgZipTooBig = (limits) =>
-  `O ficheiro .zip excede o tamanho máximo permitido (${formatBytes(limits.maxZipSize)}).`;
+  `O ficheiro .zip excede o tamanho máximo permitido para o seu perfil (${formatBytes(limits.maxFileSize)}).`;
 
 const MIME_TYPES = {
   mp4: "video/mp4",
   mov: "video/quicktime",
-  webm: "video/webm",
-  mkv: "video/x-matroska",
 };
 
 // ================== TEMPORÁRIOS ==================
 
 // Os ficheiros recebidos ficam aqui até serem validados e enviados para o S3.
-// Não contam para a quota (RN7) e são apagados em até 5 minutos (REQ-VID-UP-012).
+// Não contam para a quota (RN7) e são apagados em até 5 minutos (REQ-VID-UP-011).
 const TMP_DIR = path.join(os.tmpdir(), "picturas-uploads");
 fs.mkdirSync(TMP_DIR, { recursive: true });
 
@@ -122,11 +118,6 @@ async function loadVideoProject(req, res, next) {
   }
 }
 
-function requireZipAllowed(req, res, next) {
-  if (!req.videoLimits.zipAllowed) return res.status(403).jsonp(MSG_ZIP_ACCOUNT);
-  next();
-}
-
 /**
  * Recebe um único ficheiro (campo `field`) para disco, com limite de tamanho.
  * Se o cliente cancelar ou a ligação cair (FA3, Exceção 5), os temporários são apagados.
@@ -176,17 +167,18 @@ function receiveFile(field, maxBytesOf, tooBigMsgOf) {
 }
 
 /**
- * Valida um vídeo em disco e, se for válido, guarda-o no projeto (Passos 5 e 6).
+ * Valida um vídeo em disco e, se for válido, guarda-o no projeto (Passos 6 e 7).
  * @returns {{ ok: true, version } | { ok: false, reason }}
  */
 async function processVideoFile(req, filePath, originalName, existingNames) {
   const { user, project } = req.params;
   const limits = req.videoLimits;
-  const name = path.basename(originalName);
-  const ext = extOf(name);
+  const ext = extOf(originalName);
 
   if (!limits.extensions.includes(ext)) return { ok: false, reason: MSG_UNSUPPORTED };
-  if (existingNames.has(name)) return { ok: false, reason: MSG_DUPLICATE };
+
+  // O nome identifica o ficheiro no projeto (og_uri): nomes repetidos são renomeados
+  const name = uniqueName(path.basename(originalName), existingNames);
 
   const size = fs.statSync(filePath).size;
   if (size > limits.maxFileSize) return { ok: false, reason: msgTooBig(limits) };
@@ -232,6 +224,16 @@ async function processVideoFile(req, filePath, originalName, existingNames) {
 
   existingNames.add(name);
   return { ok: true, version: updated.version };
+}
+
+// "video.mp4" -> "video (1).mp4" se já existir no projeto
+function uniqueName(name, existingNames) {
+  if (!existingNames.has(name)) return name;
+  const ext = path.extname(name);
+  const base = name.slice(0, name.length - ext.length);
+  let i = 1;
+  while (existingNames.has(`${base} (${i})${ext}`)) i++;
+  return `${base} (${i})${ext}`;
 }
 
 async function existingNamesOf(user, project) {
@@ -280,9 +282,9 @@ function extractZip(zipPath, destDir, limits) {
           return zipfile.readEntry();
         }
 
-        // Proteção contra "zip bombs": o conteúdo descompactado também tem limite
+        // Proteção contra "zip bombs": o conteúdo descompactado não pode exceder a quota
         totalBytes += entry.uncompressedSize;
-        if (totalBytes > limits.maxZipSize) {
+        if (totalBytes > limits.storageQuota) {
           items.push({ name, reason: msgZipTooBig(limits) });
           return zipfile.readEntry();
         }
@@ -315,7 +317,7 @@ function extractZip(zipPath, destDir, limits) {
 
 // ================== ROTAS ==================
 
-// Limites do perfil e espaço ocupado na quota (REQ-VID-UP-002, REQ-VID-UP-008)
+// Limites do perfil e espaço ocupado na quota (REQ-VID-UP-002, REQ-VID-UP-007, REQ-VID-UP-016)
 router.get("/:user/storage", async (req, res) => {
   try {
     const userType = await getUserType(req.params.user);
@@ -331,8 +333,6 @@ router.get("/:user/storage", async (req, res) => {
         maxDuration: limits.maxDuration,
         maxWidth: limits.maxWidth,
         maxHeight: limits.maxHeight,
-        maxZipSize: limits.maxZipSize,
-        zipAllowed: limits.zipAllowed,
         extensions: limits.extensions,
       },
     });
@@ -342,7 +342,7 @@ router.get("/:user/storage", async (req, res) => {
   }
 });
 
-// Heartbeat da sessão anónima (REQ-VID-UP-013)
+// Heartbeat da sessão anónima (REQ-VID-UP-012)
 router.post("/:user/heartbeat", async (req, res) => {
   try {
     await Project.touchEphemeral(req.params.user);
@@ -353,7 +353,7 @@ router.post("/:user/heartbeat", async (req, res) => {
 });
 
 /**
- * Criar projeto de vídeo, com validação preliminar (Passo 3, REQ-VID-UP-001/002/006/009).
+ * Criar projeto de vídeo, com validação preliminar (Passos 3 e 4, REQ-VID-UP-001/002/014/015/016).
  * @body { name, type: "video", files: [{ name, size }], zipEntries?: [String] }
  * Pedidos sem type "video" seguem para a criação normal de projetos.
  */
@@ -365,8 +365,6 @@ router.post("/:user", async (req, res, next) => {
   const zipEntries = Array.isArray(req.body.zipEntries) ? req.body.zipEntries : [];
 
   if (!name) return res.status(400).jsonp("O nome do projeto é obrigatório.");
-  if (name.length > 100)
-    return res.status(400).jsonp("O nome do projeto não pode ter mais de 100 caracteres.");
   if (files.length === 0) return res.status(400).jsonp("Selecione pelo menos um vídeo.");
 
   const allNames = [...files.map((f) => f?.name), ...zipEntries];
@@ -383,8 +381,7 @@ router.post("/:user", async (req, res, next) => {
       const size = Number(f?.size) || 0;
 
       if (ext === ".zip") {
-        if (!limits.zipAllowed) return res.status(403).jsonp(MSG_ZIP_ACCOUNT);
-        if (size > limits.maxZipSize) return res.status(413).jsonp(msgZipTooBig(limits));
+        if (size > limits.maxFileSize) return res.status(413).jsonp(msgZipTooBig(limits));
       } else {
         if (!limits.extensions.includes(ext))
           return res.status(400).jsonp(`${f?.name}: ${MSG_UNSUPPORTED}`);
@@ -416,7 +413,7 @@ router.post("/:user", async (req, res, next) => {
 });
 
 /**
- * Transferir um vídeo para um projeto de vídeo (Passos 4 a 6).
+ * Transferir um vídeo para um projeto de vídeo (Passos 5 a 7).
  * @file video
  * @returns { accepted: [name], rejected: [{ name, reason }] }
  */
@@ -450,7 +447,7 @@ router.post(
 );
 
 /**
- * Transferir um lote (.zip) de vídeos (FA2, RN4, RN5).
+ * Transferir um lote (.zip) de vídeos (FA2, RN4). Disponível para todos os perfis (Q1).
  * Cada vídeo é validado de forma independente; só a mistura com imagens rejeita tudo.
  * @file zip
  * @returns { accepted: [name], rejected: [{ name, reason }], projectDeleted? }
@@ -460,8 +457,7 @@ router.post(
   checkSharePermission,
   requireEditPermission,
   loadVideoProject,
-  requireZipAllowed,
-  receiveFile("zip", (req) => req.videoLimits.maxZipSize, (req) => msgZipTooBig(req.videoLimits)),
+  receiveFile("zip", (req) => req.videoLimits.maxFileSize, (req) => msgZipTooBig(req.videoLimits)),
   async (req, res) => {
     const zipName = path.basename(req.file.originalname);
     const extractDir = path.join(TMP_DIR, uuidv4());
@@ -545,7 +541,7 @@ router.post(
 
 // ================== LIMPEZA PERIÓDICA ==================
 
-// Temporários de transferências canceladas, falhadas ou interrompidas (REQ-VID-UP-012)
+// Temporários de transferências canceladas, falhadas ou interrompidas (REQ-VID-UP-011)
 function sweepTmp() {
   fs.readdir(TMP_DIR, (err, names) => {
     if (err) return;
@@ -562,7 +558,7 @@ function sweepTmp() {
   });
 }
 
-// Projetos de utilizadores anónimos cuja sessão terminou (REQ-VID-UP-013)
+// Projetos de utilizadores anónimos cuja sessão terminou (REQ-VID-UP-012)
 async function sweepAnonymous() {
   try {
     const expired = await Project.getExpiredEphemeral(
