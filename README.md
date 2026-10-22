@@ -53,6 +53,10 @@ PictuRAS is a web-based image editing platform that combines traditional image p
 - **Field-level encryption**: sensitive user fields are encrypted at rest in MongoDB
 - **Subscription Plans**: free and premium tiers with different daily usage limits
 - **Project Management**: organise images and editing pipelines into projects
+- **Video Upload** (UC-VID-005): create video projects from one or more videos or a `.zip`
+  batch, with upload progress and cancel, server-side validation (`ffprobe`: integrity,
+  format, codec, duration, resolution), per-profile limits and storage quota. Limits live in
+  `projects/utils/videoLimits.js`. There are no video editing tools yet.
 - **Real-time Processing**: WebSocket-based progress updates while tools run
 - **Encrypted object storage**: SeaweedFS S3 with encryption at rest
 - **Automated backups**: periodic `mongodump` of all three databases

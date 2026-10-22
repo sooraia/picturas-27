@@ -19,7 +19,7 @@ import {
   DialogFooter,
   DialogDescription,
 } from "../ui/dialog";
-import { Ellipsis, Pencil, Trash } from "lucide-react";
+import { Ellipsis, Film, Pencil, Trash } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { Button } from "../ui/button";
 import { useDeleteProject, useUpdateProject } from "@/lib/mutations/projects";
@@ -32,6 +32,7 @@ import { getErrorMessage } from "@/lib/error-messages";
 import { useQueryClient } from "@tanstack/react-query";
 import type { SingleProject } from "@/lib/projects";
 import { useSearchParams } from "next/navigation";
+import { useVideoUploads } from "@/providers/video-upload-provider";
 
 
 export default function ProjectItem({ p }: { p: Project }) {
@@ -45,6 +46,16 @@ export default function ProjectItem({ p }: { p: Project }) {
 
   const session = useSession();
   const qc = useQueryClient();
+
+  // Progresso global do upload de vídeos deste projeto (se estiver a decorrer)
+  const upload = useVideoUploads().uploads[p._id];
+  const uploadProgress =
+    upload?.active && upload.items.length > 0
+      ? Math.round(
+          upload.items.reduce((sum, i) => sum + i.progress, 0) /
+            upload.items.length,
+        )
+      : null;
   const searchParams = useSearchParams();
 
   const ownerId = searchParams.get("owner") ?? session.user._id;
@@ -102,7 +113,15 @@ export default function ProjectItem({ p }: { p: Project }) {
           isActive={path.includes(`/dashboard/${p._id}`)}
           className="h-fit py-1 flex items-center"
         >
-          <Link href={`/dashboard/${p._id}`}>{p.name}</Link>
+          <Link href={`/dashboard/${p._id}`}>
+            {p.type === "video" && <Film className="shrink-0" />}
+            <span className="truncate">{p.name}</span>
+            {uploadProgress !== null && (
+              <span className="ml-auto text-xs text-muted-foreground shrink-0">
+                {uploadProgress}%
+              </span>
+            )}
+          </Link>
         </SidebarMenuButton>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

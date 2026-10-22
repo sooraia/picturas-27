@@ -11,12 +11,24 @@ const imgSchema = new mongoose.Schema({
   new_uri: { type: String, required: true },
   og_img_key: { type: String, required: true },
   og_sha256: { type: String, required: true }, 
+  // metadados de vídeo (UC-VID-005); ficam vazios nas imagens
+  media_type: { type: String, enum: ["image", "video"], default: "image" },
+  size: { type: Number, default: 0 }, // bytes, contabilizado na quota
+  duration: { type: Number },
+  width: { type: Number },
+  height: { type: Number },
+  codec: { type: String },
 });
 
 
 const projectSchema = new mongoose.Schema({
   name: { type: String, required: true },
   user_id: { type: mongoose.Schema.Types.ObjectId, required: true },
+  // um projeto contém só imagens ou só vídeos (RN9)
+  type: { type: String, enum: ["image", "video"], default: "image" },
+  // projetos de utilizadores anónimos: apagados quando a sessão termina (RN3)
+  ephemeral: { type: Boolean, default: false },
+  lastSeenAt: { type: Date, default: null },
   imgs: { type: [imgSchema], default: [] },
   tools: { type: [toolSchema], default: [] },
   version: { type: Number, default: 0 },

@@ -5,6 +5,7 @@ import { fetchSharedProject, resolveShareLink } from "@/lib/projects";
 import { ProjectImageList } from "@/components/project-page/project-image-list";
 import { ViewToggle } from "@/components/project-page/view-toggle";
 import { AddImagesDialog } from "@/components/project-page/add-images-dialog";
+import VideoUploadStatus from "@/components/project-page/video-upload-status";
 import { Button } from "@/components/ui/button";
 import { Toolbar } from "@/components/toolbar/toolbar";
 import { ShareProjectDialog } from "@/components/projects/share-dialog";
@@ -592,6 +593,8 @@ const handleCancel = () => {
   );
 };
   
+  const isVideo = project.data.type === "video";
+
   return (
     <ProjectProvider
       project={project.data}
@@ -625,6 +628,8 @@ const handleCancel = () => {
                       <div className="flex items-center gap-2 flex-wrap justify-end xl:justify-normal w-full xl:w-auto">
               {mode !== "results" && (
                 <>
+                  {/* Ainda não há ferramentas de edição de vídeo */}
+                  {!isVideo && (
                   <Button
                     disabled={
                       !canEdit ||
@@ -698,8 +703,9 @@ const handleCancel = () => {
                   >
                     <Play /> Apply
                   </Button>
+                  )}
 
-          {canEdit && (
+          {canEdit && !isVideo && (
             <>
                   <AiAssistantDialog
                     uid={session.user._id}
@@ -824,10 +830,13 @@ const handleCancel = () => {
             </div>
           </div>
         </div>
+        {/* Progresso do upload de vídeos (UC-VID-005) */}
+        {isVideo && <VideoUploadStatus projectId={project.data._id} />}
+
         {/* Main Content */}
 
         <div className="h-full overflow-x-hidden flex">
-        <Toolbar />
+        {!isVideo && <Toolbar />}
         <ProjectImageList
           setCurrentImageId={setCurrentImage}
           results={projectResults.data}

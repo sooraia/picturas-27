@@ -23,12 +23,14 @@ export interface Project {
   user_id: string;
   name: string;
   version: number;
+  type?: "image" | "video";
 }
 
 export interface SingleProject {
   _id: string;
   user_id: string;
   name: string;
+  type?: "image" | "video";
   tools: ProjectToolResponse[];
   imgs: ProjectImage[];
   version: number;
@@ -38,6 +40,7 @@ export interface ProjectImage {
   _id: string;
   name: string;
   url: string;
+  media_type?: "image" | "video";
 }
 
 export interface ProjectImageText {
@@ -180,6 +183,7 @@ export const fetchProjects = async (uid: string, token: string) => {
     user_id: uid,
     name: p.name,
     version: p.version, 
+    type: p.type ?? "image",
   })) as Project[];
 };
 
@@ -207,6 +211,7 @@ export const fetchProject = async (
     _id: response.data._id,
     user_id: response.data.user_id,
     name: response.data.name,
+    type: response.data.type ?? "image",
     imgs: response.data.imgs,
     tools: response.data.tools,
     version: response.data.version,
@@ -334,6 +339,7 @@ export const getProjectImages = async (
     _id: img._id,
     name: img.name,
     url: img.url,
+    media_type: img.media_type,
   })) as ProjectImage[];
 };
 

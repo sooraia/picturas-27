@@ -175,6 +175,92 @@ router.delete("/:user/:project/share/:shareId", auth.checkToken, (req, res) => {
     .catch((err) => forwardAxiosError(res, err, "mensagem fallback"));
 });
 
+// ================== VÍDEO (UC-VID-005) ==================
+
+/**
+ * Reencaminha um upload multipart para o projects-ms em stream, sem o guardar
+ * em memória (os vídeos podem ter vários GB). Se o cliente cancelar ou a ligação
+ * cair, o pedido ao projects-ms é abortado para que os temporários sejam apagados.
+ */
+function proxyUpload(req, res, targetPath) {
+  const url = new URL(projectsURL + targetPath);
+  if (req.query.share) url.searchParams.set("share", req.query.share);
+
+  const headers = {
+    "Content-Type": req.headers["content-type"],
+    Authorization: req.headers["authorization"],
+    "X-Caller-Id": req.authUserId || req.params.user,
+  };
+  if (req.headers["content-length"])
+    headers["Content-Length"] = req.headers["content-length"];
+
+  const upstream = https.request(
+    url,
+    { method: "POST", agent: httpsAgent, headers },
+    (up) => {
+      res.status(up.statusCode);
+      if (up.headers["content-type"]) res.set("Content-Type", up.headers["content-type"]);
+      if (up.headers["x-project-version"])
+        res.set("X-Project-Version", up.headers["x-project-version"]);
+      up.pipe(res);
+    },
+  );
+
+  upstream.on("error", (err) => {
+    console.error("[API-GW] upload proxy error", err.message);
+    if (!res.headersSent) res.status(502).jsonp("Falha na transferência do vídeo. Tente novamente.");
+  });
+
+  res.on("close", () => {
+    if (!res.writableFinished) upstream.destroy();
+  });
+
+  req.pipe(upstream);
+}
+
+/**
+ * Limites do perfil e espaço ocupado na quota de armazenamento
+ * @returns { type, used, quota, limits }
+ */
+router.get("/:user/storage", auth.checkToken, (req, res) => {
+  axios
+    .get(projectsURL + `${req.params.user}/storage`, { httpsAgent })
+    .then((resp) => res.status(200).jsonp(resp.data))
+    .catch((err) => forwardAxiosError(res, err, "Error acquiring user's storage"));
+});
+
+/**
+ * Heartbeat da sessão anónima (mantém os projetos de vídeo temporários)
+ */
+router.post("/:user/heartbeat", auth.checkToken, (req, res) => {
+  axios
+    .post(projectsURL + `${req.params.user}/heartbeat`, {}, { httpsAgent })
+    .then(() => res.sendStatus(204))
+    .catch((err) => forwardAxiosError(res, err, "Error updating session"));
+});
+
+/**
+ * Adicionar um vídeo a um projeto de vídeo
+ * @file video
+ * @returns { accepted: [String], rejected: [{ name, reason }] }
+ */
+router.post("/:user/:project/video", auth.checkToken, (req, res) => {
+  const ownerId = req.query.owner || req.params.user;
+  proxyUpload(req, res, `${ownerId}/${req.params.project}/video`);
+});
+
+/**
+ * Adicionar um lote (.zip) de vídeos a um projeto de vídeo
+ * @file zip
+ * @returns { accepted: [String], rejected: [{ name, reason }], projectDeleted? }
+ */
+router.post("/:user/:project/video/zip", auth.checkToken, (req, res) => {
+  const ownerId = req.query.owner || req.params.user;
+  proxyUpload(req, res, `${ownerId}/${req.params.project}/video/zip`);
+});
+
+// ================== FIM VÍDEO ==================
+
 /**
  * Get user's projects
  * @body Empty
@@ -351,7 +437,8 @@ router.get(
 
 /**
  * Create new user's project
- * @body { "name": String }
+ * @body { "name": String } or, for a video project,
+ *       { "name": String, "type": "video", "files": [{ "name", "size" }], "zipEntries"?: [String] }
  * @returns Created project's data
  */
 router.post("/:user", auth.checkToken, function (req, res, next) {

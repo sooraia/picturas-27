@@ -26,6 +26,7 @@ import { createBlobUrlFromFile, downloadBlob } from "../utils";
 import { validateSession, SessionData } from "../session";
 import type { ProjectTool, ProjectToolResponse } from "../projects";
 import { assistantSuggest, AssistantSuggestion } from "../projects";
+import { createVideoProject } from "../video";
 
 function bumpProjectVersion(
   qc: ReturnType<typeof useQueryClient>,
@@ -45,6 +46,19 @@ export const useAddProject = (uid: string, token: string) => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: addProject,
+    onSuccess: () => {
+      qc.invalidateQueries({
+        refetchType: "all",
+        queryKey: ["projects", uid, token],
+      });
+    },
+  });
+};
+
+export const useCreateVideoProject = (uid: string, token: string) => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: createVideoProject,
     onSuccess: () => {
       qc.invalidateQueries({
         refetchType: "all",
@@ -78,6 +92,7 @@ export const useDeleteProject = (
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["projects", uid, token], refetchType: "all" });
       qc.invalidateQueries({ queryKey: projectKey, refetchType: "all" });
+      qc.invalidateQueries({ queryKey: ["storage", uid, token], refetchType: "all" });
       qc.invalidateQueries({ queryKey: ["projectImages", uid, pid, token, ownerId, shareId], refetchType: "all" });
       qc.invalidateQueries({ queryKey: ["projectResults", uid, pid, token, ownerId, shareId], refetchType: "all" });
     },
@@ -178,6 +193,7 @@ export const useDeleteProjectImages = (
         queryKey: ["projectImages", uid, pid, token, ownerId, shareId],
         refetchType: "all",
       });
+      qc.invalidateQueries({ queryKey: ["storage", uid, token], refetchType: "all" });
     },
   });
 };

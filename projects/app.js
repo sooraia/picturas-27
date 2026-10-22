@@ -6,6 +6,7 @@ var logger = require("morgan");
 const mongoose = require("mongoose");
 
 const { router: projectsRouter, process_msg } = require("./routes/projects");
+const { router: videosRouter, startVideoCleanup } = require("./routes/videos");
 
 // Run Docker
 const mongoDB = "mongodb://projects_mongoDB:27018/project";
@@ -31,10 +32,15 @@ app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, "public")));
 
+// Rotas de vídeo primeiro: GET /:user/storage não pode cair em GET /:user/:project
+app.use("/", videosRouter);
 app.use("/", projectsRouter);
 
 // Start the message processing
 process_msg();
+
+// Limpeza de temporários de upload e de projetos de sessões anónimas terminadas
+startVideoCleanup();
 
 // catch 404 and forward to error handler
 app.use(function (req, res, next) {

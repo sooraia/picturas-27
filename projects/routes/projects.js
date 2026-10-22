@@ -763,7 +763,8 @@ router.get("/:user", (req, res, next) => {
         ans.push({
           _id: p._id,
           name: p.name,
-          version: p.version
+          version: p.version,
+          type: p.type,
         });
       }
 
@@ -813,6 +814,7 @@ router.get("/:user/:project", checkSharePermission, async (req, res, next) => {
       const response = {
         _id: project._id,
         name: project.name,
+        type: project.type,
         tools: project.tools,
         imgs: [],
         version: project.version,
@@ -832,6 +834,7 @@ router.get("/:user/:project", checkSharePermission, async (req, res, next) => {
             _id: img._id,
             name: path.basename(img.og_uri),
             url: url,
+            media_type: img.media_type,
           });
         } catch (_) {
           res.status(404).jsonp(`Error acquiring image's url`);
@@ -889,6 +892,7 @@ router.get("/:user/:project/imgs", checkSharePermission, async (req, res, next) 
               _id: img._id,
               name: path.basename(img.og_uri),
               url: url,
+              media_type: img.media_type,
             });
           } catch (_) {
             res.status(404).jsonp(`Error acquiring image's url`);
@@ -1177,6 +1181,12 @@ router.post(
       return;
     }
 
+    // Um projeto contém só imagens ou só vídeos (RN9)
+    if (req.projectDoc?.type === "video") {
+      res.status(400).jsonp("Um projeto só pode conter imagens ou vídeos.");
+      return;
+    }
+
     Project.getOne(req.params.user, req.params.project)
       .then(async (project) => {
         const same_name_img = project.imgs.filter(
@@ -1258,6 +1268,13 @@ router.post("/:user/:project/tool", checkSharePermission, requireEditPermission,
       .status(400)
       .jsonp(`A tool should have a procedure and corresponding parameters`);
     return;
+  }
+
+  // Ainda não existem ferramentas de edição de vídeo
+  if (req.projectDoc?.type === "video") {
+    return res
+      .status(400)
+      .jsonp("Ainda não existem ferramentas de edição para projetos de vídeo.");
   }
 
   let required_types = ["free", "premium"];
@@ -2563,4 +2580,4 @@ router.post(
   }
 );
 
-module.exports = { router, process_msg };
+module.exports = { router, process_msg, deleteProjectAndResources };

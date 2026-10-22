@@ -17,6 +17,7 @@ import NewProjectDialog from "./new-project-dialog";
 import ProjectList from "./project-list";
 import { useSession } from "@/providers/session-provider";
 import OperationsCounter from "../operations-counter";
+import StorageCounter from "../storage-counter";
 
 export default function DashboardSidebar() {
   const path = usePathname();
@@ -62,6 +63,7 @@ export default function DashboardSidebar() {
         </SidebarContent>
         <SidebarFooter className="flex flex-col gap-2">
           {(isFreePlan || isAnonymous) && <OperationsCounter />}
+          <StorageCounter />
 
           {session.user.type !== "anonymous" ? (
             <NavUser

@@ -3,6 +3,7 @@
 import DashboardSidebar from "@/components/dashboard-sidebar/dashboard-sidebar";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { usePathname } from "next/navigation";
+import { VideoUploadProvider } from "@/providers/video-upload-provider";
 
 export default function RootLayout({
   children,
@@ -11,6 +12,7 @@ export default function RootLayout({
 }>) {
   const path = usePathname();
   return (
+    <VideoUploadProvider>
     <SidebarProvider defaultOpen>
       <div className="flex min-h-screen w-screen">
         <DashboardSidebar />
@@ -25,5 +27,6 @@ export default function RootLayout({
         </main>
       </div>
     </SidebarProvider>
+    </VideoUploadProvider>
   );
 }

@@ -33,6 +33,22 @@ async function post_image(user, project, type, file) {
   );
 }
 
+// Envia um ficheiro em disco por stream (vídeos), sem o carregar em memória
+async function post_file_stream(user, project, type, filePath, ext, contentType) {
+  return await axios.post(
+    `${img_storage_ms}/upload-stream/${user}/${project}/${type}?ext=${encodeURIComponent(ext)}`,
+    fs.createReadStream(filePath),
+    {
+      headers: {
+        "Content-Type": contentType,
+        "Content-Length": fs.statSync(filePath).size,
+      },
+      maxBodyLength: Infinity,
+      maxContentLength: Infinity,
+    },
+  );
+}
+
 async function delete_image(user, project, type, img) {
   return await axios.delete(
     `${img_storage_ms}/delete/${user}/${project}/${type}/${img}` /* , { httpsAgent: httpsAgent } */,
@@ -47,4 +63,4 @@ async function copy_image(userId, projectId, fromStage, toStage, fileName) {
   );
 }
 
-module.exports = { get_image_internal_url, get_image_public_url, post_image, delete_image, copy_image };
+module.exports = { get_image_internal_url, get_image_public_url, post_image, post_file_stream, delete_image, copy_image };

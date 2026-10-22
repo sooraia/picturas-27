@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 import { Card } from "@/components/ui/card";
-import { Download, Trash } from "lucide-react";
+import { Download, Film, Trash } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -63,7 +63,29 @@ export function ProjectImage({ image, animation = true }: ImageItemProps) {
       <ContextMenu>
         <ContextMenuTrigger>
           <Card className="group relative overflow-hidden size-full">
-            {/* Image */}
+            {image.media_type === "video" ? (
+              // Vídeo (UC-VID-005): na grelha só a pré-visualização, no carrossel com controlos
+              <div className="size-full relative grid z-0 grid-cols-1 grid-rows-1 bg-black">
+                <video
+                  src={image.url}
+                  controls={!animation}
+                  muted={animation}
+                  preload="metadata"
+                  className={cn(
+                    "size-full object-contain row-start-1 col-start-1 z-30",
+                    animation && "transition-all group-hover:scale-105 pointer-events-none",
+                  )}
+                  onLoadedMetadata={() => setLoaded(true)}
+                />
+                {animation && (
+                  <Film className="row-start-1 col-start-1 z-40 m-2 size-5 text-white drop-shadow" />
+                )}
+                {!loaded && (
+                  <Skeleton className="size-full row-start-1 col-start-1 z-50" />
+                )}
+              </div>
+            ) : (
+            /* Image */
             <div className="size-full relative grid z-0 grid-cols-1 grid-rows-1">
               <Image
                 src={image.url}
@@ -94,6 +116,7 @@ export function ProjectImage({ image, animation = true }: ImageItemProps) {
                 </>
               )}
             </div>
+            )}
           </Card>
         </ContextMenuTrigger>
         <ContextMenuContent>

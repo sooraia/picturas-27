@@ -10,6 +10,7 @@ import io from "socket.io-client";
 import { listProjectShareLinks, fetchSharedProject } from "../projects";
 import type { ShareLink } from "../projects";
 import { resolveShareLink } from "../projects";
+import { fetchStorage } from "../video";
 
 export const useProjectShareLinks = (
   userId: string,
@@ -20,6 +21,15 @@ export const useProjectShareLinks = (
     queryKey: ["projectShareLinks", userId, projectId, token],
     queryFn: () => listProjectShareLinks(userId, projectId, token),
     enabled: !!userId && !!projectId && !!token,
+  });
+};
+
+// Limites do perfil e espaço ocupado na quota de armazenamento (UC-VID-005)
+export const useGetStorage = (uid: string, token: string) => {
+  return useQuery({
+    queryKey: ["storage", uid, token],
+    queryFn: () => fetchStorage(uid, token),
+    enabled: !!uid && !!token,
   });
 };
 
