@@ -712,6 +712,10 @@ const handleCancel = () => {
                       videoStepProgressRef.current = {};
                       videoDoneStepsRef.current = 0;
                       setProcessingProgress(0);
+                      // Voltar a aceitar updates já aqui: o onSuccess só corre depois de
+                      // atualizar a sessão, e um processamento rápido (ex.: vídeo curto)
+                      // pode terminar antes disso (os updates seriam ignorados após um Cancelar)
+                      ignoreUpdatesRef.current = false;
                       setProcessing(true);        
                       sidebar.setOpen(false);
                       
