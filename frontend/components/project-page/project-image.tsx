@@ -91,7 +91,7 @@ export function ProjectImage({ image, animation = true }: ImageItemProps) {
                 {canExport && !animation && (
                   <Button
                     size="sm"
-                    className="row-start-1 col-start-1 z-40 m-2 justify-self-end self-start"
+                    className="row-start-1 col-start-1 z-[60] m-2 justify-self-end self-start"
                     disabled={exporting}
                     onClick={() => videoExports.startExport(image)}
                   >
