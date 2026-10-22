@@ -53,6 +53,25 @@ PictuRAS is a web-based image editing platform that combines traditional image p
 - **Field-level encryption**: sensitive user fields are encrypted at rest in MongoDB
 - **Subscription Plans**: free and premium tiers with different daily usage limits
 - **Project Management**: organise images and editing pipelines into projects
+- **Video Upload** (UC-VID-005): create video projects from one or more videos or a `.zip`
+  batch, with upload progress and cancel, server-side validation (`ffprobe`: integrity,
+  format, codec, duration, resolution), per-profile limits and storage quota. Limits live in
+  `projects/utils/videoLimits.js`:
+
+  | Profile   | Max file / `.zip` | Max duration | Storage quota |
+  | --------- | ----------------- | ------------ | ------------- |
+  | Anonymous | 200 MB            | 5 min        | 200 MB        |
+  | Free      | 500 MB            | 10 min       | 2 GB          |
+  | Premium   | 2 GB              | 30 min       | 10 GB         |
+
+  All profiles: MP4 or MOV with H.264, up to 1080p.
+- **Video Trim** (UC-VID-001): cut a video to a `hh:mm:ss` interval. Runs as the
+  `video_trim` tool (ffmpeg) through the same RabbitMQ pipeline as the image tools, always
+  first in the pipeline, with real-time progress and cancel; the original is kept.
+- **Video Export** (UC-VID-002): export a processed video (results mode) as MP4/H.264 at the
+  result's resolution, with progress, cancel and an export history per video. The file is
+  reused while the result does not change. Anonymous and Free users are limited to
+  `MAX_EXPORT_SIZE` (500 MB, in `projects/routes/exports.js`).
 - **Real-time Processing**: WebSocket-based progress updates while tools run
 - **Encrypted object storage**: SeaweedFS S3 with encryption at rest
 - **Automated backups**: periodic `mongodump` of all three databases
@@ -129,7 +148,7 @@ exchange:
 
 `binarization` · `border` · `brightness` · `contrast` · `cut` · `resize` · `rotate` ·
 `saturation` · `watermark` · `bg_remove_ai` · `cut_ai` · `expand_ai` · `obj_ai` · `people_ai` ·
-`text_ai` · `upgrade_ai`
+`text_ai` · `upgrade_ai` · `video_trim`
 
 > The `watermark` tool runs from a pre-built public image
 > (`prcsousa/picturas-watermark-tool-ms`) instead of being built from this repository — it is a

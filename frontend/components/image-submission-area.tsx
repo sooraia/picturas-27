@@ -1,12 +1,13 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import AppDropzone from "./app-dropzone";
-import { FileImage, ImagePlus, Plus, X } from "lucide-react";
+import { FileImage, FileVideo, ImagePlus, Plus, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { HoverCard, HoverCardTrigger } from "./ui/hover-card";
 import { HoverCardContent } from "@radix-ui/react-hover-card";
 import ImagePreview from "./image-preview";
-import { extractZipImages } from "@/lib/utils";
+import VideoFilePreview from "./video-file-preview";
+import { isImageName, isVideoName, normalizeDroppedFiles } from "@/lib/video";
 
 export default function ImageSubmissionArea({
   receivedFiles = [],
@@ -18,42 +19,11 @@ export default function ImageSubmissionArea({
   const [files, setFiles] = useState<File[]>([]);
 
   const handleDrop = async (acceptedFiles: File[]) => {
-    const compatibleFileTypes = [
-      "image/png",
-      "image/jpeg",
-      "image/jpg",
-      "application/zip",
-    ];
-
-    // Extract images from zip files and filter out incompatible files
-    const compatibleFiles: File[] = [];
-    for (const file of acceptedFiles) {
-      if (file.type === "application/zip") {
-        const extractedFiles = await extractZipImages(file);
-        compatibleFiles.push(...extractedFiles);
-      } else if (compatibleFileTypes.includes(file.type)) {
-        compatibleFiles.push(file);
-      }
-    }
-
-    // Handle duplicate names
-    const duplicateNames = new Set<string>();
-    files.forEach((file) => duplicateNames.add(file.name));
-    const uniqueFiles = compatibleFiles.map((file) => {
-      if (duplicateNames.has(file.name)) {
-        const newFile = new File(
-          [file],
-          `${file.name.split(".")[0]} (${duplicateNames.size}).${file.name.split(".")[1]}`,
-        );
-        duplicateNames.add(newFile.name);
-        return newFile;
-      }
-      duplicateNames.add(file.name);
-      return file;
-    });
+    // Imagens, vídeos e .zip (um .zip com vídeos é mantido inteiro)
+    const uniqueFiles = await normalizeDroppedFiles(acceptedFiles, files);
 
     setFiles((prevFiles) => [...prevFiles, ...uniqueFiles]);
-    onDrop(uniqueFiles);
+    onDrop([...files, ...uniqueFiles]);
   };
 
   useEffect(() => {
@@ -72,7 +42,7 @@ export default function ImageSubmissionArea({
             <div className="flex flex-col gap-4 items-center justify-center max-w-[20rem]">
               <ImagePlus size={64} />
               <p className="font-medium text-lg">
-                Drag and drop images or a .zip
+                Drag and drop images, videos or a .zip
               </p>
             </div>
           </AppDropzone>
@@ -89,7 +59,11 @@ export default function ImageSubmissionArea({
                   >
                     <CardContent className="py-2 px-3 relative">
                       <div className="flex flex-col items-center justify-center pointer-events-none">
-                        <FileImage className="w-10 h-7 text-primary mb-1" />
+                        {isImageName(file.name) ? (
+                          <FileImage className="w-10 h-7 text-primary mb-1" />
+                        ) : (
+                          <FileVideo className="w-10 h-7 text-primary mb-1" />
+                        )}
                         <p className="text-xs text-center truncate w-full">
                           {file.name}
                         </p>
@@ -109,7 +83,11 @@ export default function ImageSubmissionArea({
                   </Card>
                 </HoverCardTrigger>
                 <HoverCardContent className="h-48 w-64 z-50">
-                  <ImagePreview file={file} />
+                  {isImageName(file.name) ? (
+                    <ImagePreview file={file} />
+                  ) : isVideoName(file.name) ? (
+                    <VideoFilePreview file={file} />
+                  ) : null}
                 </HoverCardContent>
               </HoverCard>
             ))}

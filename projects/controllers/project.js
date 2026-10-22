@@ -1,4 +1,5 @@
 var Project = require("../models/project");
+const mongoose = require("mongoose");
 const ProjectModel = require("../models/project");
 
 // DELETE condicional por versão
@@ -89,3 +90,39 @@ module.exports.updateRaw = async (user_id, project_id, update) => {
   ).exec();
 };
 
+
+// ================== VÍDEO (UC-VID-005) ==================
+
+// Adiciona um vídeo a um projeto de vídeo ($push atómico, sem exigir versão:
+// os uploads são longos e não devem falhar por conflito de versão)
+module.exports.addVideo = async (user_id, project_id, video) => {
+  return await Project.findOneAndUpdate(
+    { user_id: user_id, _id: project_id, type: "video" },
+    { $push: { imgs: video }, $inc: { version: 1 } },
+    { new: true }
+  ).exec();
+};
+
+// Espaço ocupado (bytes) por todos os ficheiros armazenados nos projetos do utilizador
+module.exports.getStorageUsed = async (user_id) => {
+  const res = await Project.aggregate([
+    { $match: { user_id: new mongoose.Types.ObjectId(String(user_id)) } },
+    { $unwind: "$imgs" },
+    { $group: { _id: null, used: { $sum: { $ifNull: ["$imgs.size", 0] } } } },
+  ]).exec();
+
+  return res.length > 0 ? res[0].used : 0;
+};
+
+// Heartbeat da sessão anónima: mantém vivos os projetos efémeros do utilizador
+module.exports.touchEphemeral = async (user_id) => {
+  return await Project.updateMany(
+    { user_id: user_id, ephemeral: true },
+    { $set: { lastSeenAt: new Date() } }
+  ).exec();
+};
+
+// Projetos efémeros cuja sessão deixou de dar sinal antes de `before`
+module.exports.getExpiredEphemeral = async (before) => {
+  return await Project.find({ ephemeral: true, lastSeenAt: { $lt: before } }).exec();
+};

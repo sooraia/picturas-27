@@ -18,6 +18,7 @@ const queues = {
     'people_ai': 'people_ai_queue',
     'expand_ai': 'expand_ai_queue',
     'watermark': 'watermark_queue',
+    'trim': 'trim_queue',
     'project': 'project_queue',
     'ws': 'ws_queue'
 }
@@ -45,6 +46,34 @@ function send_msg_client(msg_id, timestamp, user) {
         "timestamp": timestamp,
         "user": user,
         "status": 'success'
+    };
+
+    send_rabbit_msg(msg, queue);
+}
+
+// Progresso de um passo longo da pipeline (vídeo): imagem/vídeo, posição e fração 0-1
+function send_msg_client_progress(msg_id, timestamp, user, progress) {
+    const queue = queues['ws'];
+    const msg = {
+        "messageId": msg_id,
+        "timestamp": timestamp,
+        "user": user,
+        "status": 'progress',
+        "progress": progress
+    };
+
+    send_rabbit_msg(msg, queue);
+}
+
+// Estado de uma exportação de vídeo (UC-VID-002): { exportId, imgId, status, progress?, message? }
+function send_msg_client_export(msg_id, timestamp, user, payload) {
+    const queue = queues['ws'];
+    const msg = {
+        "messageId": msg_id,
+        "timestamp": timestamp,
+        "user": user,
+        "status": payload.status,
+        "export": payload
     };
 
     send_rabbit_msg(msg, queue);
@@ -108,4 +137,4 @@ function send_msg_project_op({ projectId, ownerId, op }) {
   send_rabbit_msg(msg, queue);
 }
 
-module.exports = { send_msg_tool, send_msg_client, send_msg_client_error, send_msg_client_preview, send_msg_client_preview_error, read_msg, send_msg_project_op };
+module.exports = { send_msg_tool, send_msg_client, send_msg_client_progress, send_msg_client_export, send_msg_client_error, send_msg_client_preview, send_msg_client_preview_error, read_msg, send_msg_project_op };

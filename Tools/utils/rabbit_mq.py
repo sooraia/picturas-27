@@ -8,11 +8,13 @@ def callback(ch, method, properties, body):
 """
 
 class Rabbit_MQ:
-    def __init__(self, host, port, username, password):
+    # heartbeat=None mantém o valor negociado com o broker; 0 desativa-o (pedidos
+    # longos, como vídeo, bloqueiam a ligação e o broker fechá-la-ia por falta de heartbeat)
+    def __init__(self, host, port, username, password, heartbeat=None):
         self._host = host
         self._port = port
         self._credentials = pika.PlainCredentials(username, password)
-        self._connection = pika.BlockingConnection(pika.ConnectionParameters(self._host, self._port, '/', self._credentials),)
+        self._connection = pika.BlockingConnection(pika.ConnectionParameters(self._host, self._port, '/', self._credentials, heartbeat=heartbeat),)
         self._channel = self._connection.channel()
         self._queue = ''
         

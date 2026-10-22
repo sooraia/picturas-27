@@ -76,6 +76,16 @@ function process_msg() {
             io.to(user).emit("preview-ready", img_url);
         }
 
+        // exportação de vídeo: { exportId, imgId, status, progress?, message? }
+        else if (/update-client-export/.test(msg_id)) {
+            io.to(user).emit("export-update", msg_content.export);
+        }
+
+        // progresso de um passo longo (vídeo): { imgId, position, progress }
+        else if (/update-client-progress/.test(msg_id)) {
+            io.to(user).emit("process-progress", msg_content.progress);
+        }
+
         else if (/update-client-process/.test(msg_id)) {
 
             if (status == "error") {

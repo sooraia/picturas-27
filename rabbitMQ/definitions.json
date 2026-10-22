@@ -62,6 +62,13 @@
             "arguments": {}
         },
         {
+            "name": "trim_queue",
+            "vhost": "/",
+            "durable": true,
+            "auto_delete": false,
+            "arguments": {}
+        },
+        {
             "name": "cut_queue",
             "vhost": "/",
             "durable": true,
@@ -209,6 +216,14 @@
             "destination": "contrast_queue",
             "destination_type": "queue",
             "routing_key": "contrast_queue",
+            "arguments": {}
+        },
+        {
+            "source": "picturas",
+            "vhost": "/",
+            "destination": "trim_queue",
+            "destination_type": "queue",
+            "routing_key": "trim_queue",
             "arguments": {}
         },
         {

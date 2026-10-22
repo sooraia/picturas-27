@@ -26,6 +26,9 @@ const options = { key: key, cert: cert };
 
 var server = https.createServer(options, app);
 
+// Uploads de vídeo grandes podem demorar mais do que os 5 min por omissão do Node
+server.requestTimeout = 60 * 60 * 1000;
+
 /**
  * Listen on provided port, on all network interfaces.
  */

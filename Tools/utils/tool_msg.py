@@ -26,14 +26,15 @@ class ToolMSG:
         'obj_ai': 'obj_ai_queue',
         'people_ai': 'people_ai_queue',
         'expand_ai': 'expand_ai_queue',
+        'trim': 'trim_queue',
         'project': 'project_queue'
     }
     
-    def __init__(self, microservice_name, tool_name, rabbit_host, rabbit_port, username, password):
+    def __init__(self, microservice_name, tool_name, rabbit_host, rabbit_port, username, password, heartbeat=None):
         self._microservice_name = microservice_name
         self._queue = self.queues[tool_name]
         self._proj_queue = self.queues['project']
-        self._rabbit_mq = Rabbit_MQ(rabbit_host, rabbit_port, username, password)
+        self._rabbit_mq = Rabbit_MQ(rabbit_host, rabbit_port, username, password, heartbeat)
     
     def read_msg(self, callback):
         self._rabbit_mq.read_rabbit_msg(self._queue, callback)
@@ -62,9 +63,10 @@ class ToolMSG:
                 if err_code is None or err_msg is None or og_img_uri is None:
                     raise Exception("Make sure, in case of error status, err_code, err_msg and og_img_uri are not None")
                 
+                # correlationId identifica o pedido original, tal como no caso de sucesso
                 msg = {
-                    "messageId": msg_id,
-                    "correlationId": resp_msg_id,
+                    "messageId": resp_msg_id,
+                    "correlationId": msg_id,
                     "timestamp": timestamp,
                     "status": status,
                     "error": {
@@ -85,5 +87,20 @@ class ToolMSG:
         msg = json.dumps(msg)    
             
         self._rabbit_mq.send_rabbit_msg(msg, self._proj_queue)
+
+    # Progresso intermédio de um pedido longo (vídeo), entre 0 e 1
+    def send_progress(self, msg_id, resp_msg_id, timestamp, progress):
+        msg = {
+            "messageId": resp_msg_id,
+            "correlationId": msg_id,
+            "timestamp": timestamp,
+            "status": "progress",
+            "progress": progress,
+            "metadata": {
+                "microservice": self._microservice_name
+            }
+        }
+
+        self._rabbit_mq.send_rabbit_msg(json.dumps(msg), self._proj_queue)
         
     

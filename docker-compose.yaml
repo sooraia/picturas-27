@@ -403,6 +403,20 @@ services:
     volumes:
       - image_data:/app/images
 
+  # Ferramentas de vídeo (UC-VID-001): ffmpeg sobre o mesmo volume partilhado
+  video_trim_tool:
+    build:
+      context: ./Tools
+      dockerfile: video_trim/Dockerfile
+    restart: on-failure
+    networks:
+      - elk
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    volumes:
+      - image_data:/app/images
+
   generative-mock:
     build: ./generative-mock
     ports:

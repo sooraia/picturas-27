@@ -33,6 +33,13 @@ function read_rabbit_msg(queue, callback) {
     amqp.connect(rabbit_mq_sv, (err_sv, connection) => {
         if (err_sv) throw err_sv;
 
+        // Sem ligação o consumidor deixa de receber mensagens sem dar erro: termina
+        // o processo para o Docker o reiniciar (restart: on-failure) e voltar a ligar
+        connection.on("close", () => {
+            console.error(`[RABBIT] connection to consume ${queue} closed, exiting`);
+            process.exit(1);
+        });
+
         connection.createChannel((err_conn, channel) => {
             if (err_conn) throw err_conn;
 
