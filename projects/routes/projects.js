@@ -1642,7 +1642,13 @@ router.post("/:user/:project/process", checkSharePermission, requireEditPermissi
           const fpNow = makeToolsFingerprint(project.tools || []);
           const fpCommitted = makeToolsFingerprint(project.committedTools || []);
 
-          if (hasCommit && fpNow === fpCommitted) {
+          // Só reaproveita se os resultados desse commit ainda existirem (remover uma
+          // ferramenta apaga-os; voltar a adicioná-la dava um modo results vazio)
+          const committedResults = hasCommit && fpNow === fpCommitted
+            ? await Result.getAllByToken(ownerId, req.params.project, project.committedToken)
+            : [];
+
+          if (hasCommit && fpNow === fpCommitted && committedResults.length > 0) {
             console.log(
               `[T-03][PROCESS][SKIP] user=${ownerId} project=${req.params.project} token=${project.committedToken}`
             );
