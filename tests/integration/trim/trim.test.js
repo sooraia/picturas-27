@@ -2,6 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
+const { performance } = require("node:perf_hooks");
 const { run, makeVideo, sha256, temporaryDirectory } = require("../../helpers/media");
 
 async function trimLikeProduction(input, output, start, length, cancel = false) {
@@ -48,4 +49,20 @@ test("TST-TRIM-12: ficheiro temporário de edição é descartado ao cancelar", 
   if (fs.existsSync(temporary)) fs.rmSync(temporary, { force: true });
   assert.equal(fs.existsSync(output), false);
   assert.equal(fs.existsSync(temporary), false);
+});
+
+test("TST-TRIM-13: recorte de vídeo de 5 minutos termina em até 60 segundos", async (t) => {
+  const dir = temporaryDirectory();
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const input = path.join(dir, "five-minutes.mp4");
+  const output = path.join(dir, "five-minutes-trim.mp4");
+  await makeVideo(input, { duration: 300, width: 160, height: 90, fps: 5 });
+
+  const started = performance.now();
+  await trimLikeProduction(input, output, 0, 300);
+  const elapsedSeconds = (performance.now() - started) / 1000;
+
+  console.log(`TST-TRIM-13: recorte de vídeo de 5 minutos terminou em ${elapsedSeconds.toFixed(2)}s`);
+  assert.ok(fs.existsSync(output));
+  assert.ok(elapsedSeconds <= 60, `recorte demorou ${elapsedSeconds.toFixed(1)}s`);
 });
