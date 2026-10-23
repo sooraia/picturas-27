@@ -62,7 +62,6 @@ test("TST-TRIM-13: recorte de vídeo de 5 minutos termina em até 60 segundos", 
   await trimLikeProduction(input, output, 0, 300);
   const elapsedSeconds = (performance.now() - started) / 1000;
 
-  console.log(`TST-TRIM-13: recorte de vídeo de 5 minutos terminou em ${elapsedSeconds.toFixed(2)}s`);
   assert.ok(fs.existsSync(output));
-  assert.ok(elapsedSeconds <= 60, `recorte demorou ${elapsedSeconds.toFixed(1)}s`);
+  assert.ok(elapsedSeconds <= 60);
 });

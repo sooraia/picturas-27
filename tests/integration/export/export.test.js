@@ -53,7 +53,6 @@ test("TST-EXP-12: geração de vídeo de 5 minutos termina em até 60 segundos",
   await exportMp4(input, output);
   const elapsedSeconds = (performance.now() - started) / 1000;
 
-  console.log(`TST-EXP-12: geração de vídeo de 5 minutos terminou em ${elapsedSeconds.toFixed(2)}s`);
   assert.ok(fs.existsSync(output));
-  assert.ok(elapsedSeconds <= 60, `exportação demorou ${elapsedSeconds.toFixed(1)}s`);
+  assert.ok(elapsedSeconds <= 60);
 });
