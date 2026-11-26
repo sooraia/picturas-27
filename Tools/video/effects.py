@@ -7,6 +7,9 @@ the same ones the frontend already sends to the image tools.
 """
 from PIL import Image, ImageEnhance, ImageOps
 
+# one error class for the whole video pipeline (raised when planning too)
+from video_common.pipeline import UnsupportedEffect  # noqa: F401 (re-exported)
+
 
 def brightness(img: Image.Image, brightness: float) -> Image.Image:
     return ImageEnhance.Brightness(img).enhance(float(brightness))
@@ -60,8 +63,6 @@ TIME_EFFECTS = {"trim", "speed"}
 SUPPORTED = set(FRAME_EFFECTS) | TIME_EFFECTS
 
 
-class UnsupportedEffect(Exception):
-    pass
 
 
 def apply_frame_effects(img: Image.Image, tools: list) -> Image.Image:

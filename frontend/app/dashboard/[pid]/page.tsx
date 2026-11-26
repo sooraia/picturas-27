@@ -1,7 +1,9 @@
 "use client";
 
 import { Download, LoaderCircle, OctagonAlert, Play } from "lucide-react";
-import { fetchSharedProject, resolveShareLink } from "@/lib/projects";
+import { fetchProcessStatus, fetchSharedProject, resolveShareLink } from "@/lib/projects";
+import type { ProcessStatus } from "@/lib/projects";
+import { ProcessingIndicator } from "@/components/project-page/processing-indicator";
 import { ProjectImageList } from "@/components/project-page/project-image-list";
 import { ViewToggle } from "@/components/project-page/view-toggle";
 import { AddImagesDialog } from "@/components/project-page/add-images-dialog";
@@ -33,9 +35,6 @@ import {
 } from "@/components/ui/dropdown-menu"; // shadcn / radix menu
 import { useToast } from "@/hooks/use-toast";
 import { ProjectImage, isVideo } from "@/lib/projects";
-import { Progress } from "@/components/ui/progress";
-import { Card } from "@/components/ui/card";
-import { Transition } from "@headlessui/react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { ModeToggle } from "@/components/project-page/mode-toggle";
@@ -105,6 +104,10 @@ export default function Project({
 
   // se um processamento envolve ferramentas de IA ou não
   const processIsAiRef = useRef<boolean>(false);
+
+  // latest values read by the processing recovery (DA-1) without re-subscribing
+  const processingRef = useRef<boolean>(false);
+  const applyPendingRef = useRef<boolean>(false);
 
   // Each image goes through each image tool (trim is video-only);
   // each video is processed in one go by the video worker (a single step).
@@ -464,6 +467,75 @@ useEffect(() => {
   hasVideos,
 ]);
 
+// DA-1: recover the processing run after a page refresh or a WebSocket
+// reconnection. The backend rebuilds it from the persisted Process records.
+processingRef.current = processing;
+applyPendingRef.current = processProject.isPending;
+const projectLoaded = project.isSuccess;
+
+useEffect(() => {
+  const s = socket.data;
+  if (!s || !projectLoaded) return;
+  let cancelled = false;
+
+  async function syncProcessing() {
+    // while the Apply request is open the run may not have Process records yet
+    if (applyPendingRef.current) return;
+    let status: ProcessStatus;
+    try {
+      status = await fetchProcessStatus(session.user._id, pid, session.token, ownerId, shareId);
+    } catch {
+      return; // keep the current state; the next reconnection tries again
+    }
+    if (cancelled || applyPendingRef.current) return;
+
+    // only the user who started the run receives its progress events
+    if (status.running && status.runnerId === session.user._id) {
+      ignoreUpdatesRef.current = false;
+      setProcessing(true);
+      setProcessingSteps(status.done + 1);
+      setProcessingProgress(
+        status.total > 0 ? Math.min(100, Math.round((status.done * 100) / status.total)) : 0,
+      );
+      return;
+    }
+
+    if (status.running || !processingRef.current) return;
+
+    // The run ended while no events were being received (e.g. socket down)
+    if (status.completed) {
+      await projectResults.refetch();
+      if (cancelled) return;
+      setWaitingForPreview("__APPLY_DONE__");
+      const params = new URLSearchParams(searchParams.toString());
+      params.set("mode", "results");
+      params.set("view", "grid");
+      router.push(`?${params.toString()}`);
+    }
+    processStartTimeRef.current = null;
+    processIsAiRef.current = false;
+    setProcessing(false);
+    setProcessingProgress(0);
+    setProcessingSteps(1);
+    setVideoProgress({});
+    if (!isMobile) sidebar.setOpen(true);
+  }
+
+  // socket.io emits "connect" on the first connection and on every reconnection
+  function onConnect() {
+    s?.emit("join-project", pid);
+    syncProcessing();
+  }
+
+  syncProcessing();
+  s.on("connect", onConnect);
+  return () => {
+    cancelled = true;
+    s.off("connect", onConnect);
+  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [socket.data, projectLoaded, pid, session.user._id, session.token, ownerId, shareId]);
+
 if (project.isError) {
   // caso especial: projeto aberto via link de partilha
   if (shareId) {
@@ -635,6 +707,7 @@ const handleCancel = () => {
       ownerId={ownerId}
       shareId={shareId}
       canEdit={canEdit}
+      processing={processing}
     >
       <div className="flex flex-col h-screen relative">
         {/* Barra de aviso quando o link partilhado é revogado */}
@@ -663,6 +736,7 @@ const handleCancel = () => {
                   <Button
                     disabled={
                       !canEdit ||
+                      processing ||
                       project.data.tools.length <= 0 ||
                       waitingForPreview !== ""
                     }
@@ -753,7 +827,8 @@ const handleCancel = () => {
                     <Play /> Apply
                   </Button>
 
-          {canEdit && (
+          {/* editing the pipeline or the media is not allowed while processing */}
+          {canEdit && !processing && (
             <>
                   <AiAssistantDialog
                     uid={session.user._id}
@@ -891,40 +966,14 @@ const handleCancel = () => {
         />
       </div>
       </div>
-      <Transition
+      {/* DA-1: non-blocking progress (was a full-screen overlay) */}
+      <ProcessingIndicator
         show={processing}
-        enter="transition-opacity ease-in duration-300"
-        enterFrom="opacity-0"
-        enterTo="opacity-100"
-        leave="transition-opacity ease-out duration-300"
-        leaveFrom="opacity-100"
-        leaveTo="opacity-0"
-      >
-        <div className="absolute top-0 left-0 h-screen w-screen bg-black/70 z-50 flex justify-center items-center">
-          <Card className="p-4 flex flex-col justify-center items-center gap-4">
-            <div className="flex gap-2 items-center text-lg font-semibold">
-              <h1>Processing</h1>
-              <LoaderCircle className="size-[1em] animate-spin" />
-            </div>
-            <Progress value={displayedProgress} className="w-96" />
-            {hasVideos && (
-              <span className="text-xs text-muted-foreground">{displayedProgress}%</span>
-            )}
-
-            <Button
-              variant="outline"
-              disabled={cancelProcess.isPending}
-              onClick={handleCancel}
-            >
-              {cancelProcess.isPending ? (
-                <LoaderCircle className="size-[1em] animate-spin" />
-              ) : (
-                "Cancelar"
-              )}
-            </Button>
-          </Card>
-        </div>
-      </Transition>
+        progress={displayedProgress}
+        showPercent={hasVideos}
+        cancelling={cancelProcess.isPending}
+        onCancel={handleCancel}
+      />
     </ProjectProvider>
   );
 }

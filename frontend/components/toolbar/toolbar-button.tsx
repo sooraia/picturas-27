@@ -16,6 +16,7 @@ import {
   useProjectInfo,
   useUnsavedChanges,
   useCanEditProject,
+  useProjectProcessing,
 } from "@/providers/project-provider";
 import {
   useAddProjectTool,
@@ -76,6 +77,8 @@ export function ToolbarButton({
   const { setHasUnsavedChanges } = useUnsavedChanges();
   const { toast } = useToast();
   const canEdit = useCanEditProject();
+  // the pipeline cannot change while a run is in progress (as with the old blocking overlay)
+  const processing = useProjectProcessing();
 
   const socket = useGetSocket(session.token);
   const searchParams = useSearchParams();
@@ -297,14 +300,16 @@ export function ToolbarButton({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project.tools, tool.procedure, matchTool]);
 
-  const locked = !canEdit;
+  const locked = !canEdit || processing;
 
   const uiDisabled =
     disabled ||
     locked ||
     (preview.waiting !== tool.procedure && preview.waiting !== "");
 
-  const lockReason = "Read-only (não podes editar)";
+  const lockReason = processing
+    ? "Processamento em curso"
+    : "Read-only (não podes editar)";
 
   const TButton = () => (
     <Tooltip>

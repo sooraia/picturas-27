@@ -897,6 +897,38 @@ export const fetchProjectResults = async (
   };
 };
 
+// Current processing run of a project, rebuilt by the backend from the
+// persisted Process records (used to recover the progress after a refresh)
+export interface ProcessStatus {
+  running: boolean;
+  completed: boolean;
+  activeToken: number;
+  total: number;
+  done: number;
+  // user who started the run (only that user receives its progress events)
+  runnerId?: string;
+}
+
+export const fetchProcessStatus = async (
+  uid: string,
+  pid: string,
+  token: string,
+  ownerId?: string,
+  shareId?: string,
+): Promise<ProcessStatus> => {
+  const query = buildQuery({ ownerId, shareId });
+  const pathUid = pathUidFor(uid, ownerId, shareId);
+  const response = await api.get<ProcessStatus>(
+    `/projects/${pathUid}/${pid}/process/status${query}`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+
+  if (response.status !== 200 || !response.data)
+    throw new Error("Failed to fetch processing status");
+
+  return response.data;
+};
+
 export const processProject = async ({
   uid,
   pid,

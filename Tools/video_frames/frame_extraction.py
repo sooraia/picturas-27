@@ -1,4 +1,7 @@
-"""Bounded still-frame extraction and a small preview contact sheet."""
+"""Bounded still-frame extraction and a small preview contact sheet.
+
+Runs in the frame extraction service (video_frames_tool, DA-2).
+"""
 import math
 import os
 from pathlib import Path
@@ -8,28 +11,9 @@ import uuid
 
 from PIL import Image, ImageDraw
 
-MAX_FRAMES = 100
-
-
-class InvalidExtraction(ValueError):
-    """Invalid frame extraction parameters or an excessive output count."""
-
-
-def validate_params(params):
-    if not isinstance(params, dict):
-        raise InvalidExtraction("Frame extraction requires parameters")
-    mode = params.get("mode", "count")
-    fmt = params.get("format", "png")
-    if mode not in ("count", "interval") or fmt not in ("png", "jpeg"):
-        raise InvalidExtraction("Choose count/interval and PNG/JPEG")
-    value = params.get("count", 6) if mode == "count" else params.get("interval", 2)
-    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
-        raise InvalidExtraction("Frame count or interval must be a finite number")
-    if mode == "count" and (value != int(value) or not 1 <= value <= MAX_FRAMES):
-        raise InvalidExtraction("Frame count must be an integer between 1 and 100")
-    if mode == "interval" and value <= 0:
-        raise InvalidExtraction("Frame interval must be greater than zero")
-    return mode, value, fmt
+# parameter validation is part of the stage contract, shared with the planner
+from video_common.pipeline import (MAX_FRAMES, InvalidExtraction,  # noqa: F401 (re-exported)
+                                   validate_params)
 
 
 def sampling_times(params, duration, fps):

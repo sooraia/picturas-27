@@ -68,6 +68,7 @@ const {
 } = require("../utils/video");
 const { persistFrameResults } = require("../utils/frameResults");
 const { dispatchProcessBatch } = require("../utils/processBatch");
+const { processStatus } = require("../utils/processStatus");
 
 const storage = multer.memoryStorage();
 var upload = multer({ storage: storage });
@@ -966,6 +967,20 @@ router.get("/:user/:project/imgs", checkSharePermission, async (req, res, next) 
       }
     })
     .catch((_) => res.status(501).jsonp(`Error acquiring user's project`));
+});
+
+// Current processing run, rebuilt from the Process records (DA-1): lets the
+// frontend recover the progress and the cancel button after a refresh.
+router.get("/:user/:project/process/status", checkSharePermission, async (req, res) => {
+  try {
+    const project = await Project.getOne(req.params.user, req.params.project);
+    if (!project) return res.status(404).jsonp("Project not found");
+    const processes = await Process.getProject(req.params.user, req.params.project);
+    return res.status(200).jsonp(processStatus(project, processes));
+  } catch (err) {
+    console.error("[PROCESS-STATUS] error:", err);
+    return res.status(500).jsonp("Error acquiring the project's processing status");
+  }
 });
 
 // Get results of processing a project

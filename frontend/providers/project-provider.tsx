@@ -29,6 +29,8 @@ interface ProjectContextData {
   hasUnsavedChanges: boolean;
   setHasUnsavedChanges: (dirty: boolean) => void;
   canEdit: boolean;
+  // a processing run is in progress: the pipeline and media cannot change
+  processing: boolean;
 }
 
 const ProjectContext = createContext<ProjectContextData | undefined>(undefined);
@@ -41,6 +43,7 @@ export function ProjectProvider({
   ownerId,
   shareId,
   canEdit = true,
+  processing = false,
 }: {
   children: React.ReactNode;
   project: SingleProject;
@@ -52,6 +55,7 @@ export function ProjectProvider({
   ownerId?: string;
   shareId?: string;
   canEdit?: boolean;
+  processing?: boolean;
 }) {
   const session = useSession();
   const socket = useGetSocket(session.token);
@@ -291,6 +295,7 @@ export function ProjectProvider({
         preview,
         hasUnsavedChanges,
         canEdit,
+        processing,
         setHasUnsavedChanges: (dirty: boolean) => {
           if (!canEdit) return;
           setHasUnsavedChanges(dirty);
@@ -351,4 +356,12 @@ export function useCanEditProject() {
     throw new Error("useCanEditProject() must be used within a ProjectProvider");
   }
   return context.canEdit;
+}
+
+export function useProjectProcessing() {
+  const context = useContext(ProjectContext);
+  if (context === undefined) {
+    throw new Error("useProjectProcessing() must be used within a ProjectProvider");
+  }
+  return context.processing;
 }

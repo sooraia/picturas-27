@@ -1,5 +1,7 @@
 """Local speech recognition and burned-in captions, inspired by PL2-G5.
 
+Runs in the captions service (video_subtitles_tool, DA-2).
+
 The model is loaded once per worker, lazily, and cached on a Docker volume.
 No speech/audio is a successful no-op; model or encoder failures are errors.
 """

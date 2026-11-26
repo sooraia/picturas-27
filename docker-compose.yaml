@@ -252,7 +252,8 @@ services:
     volumes:
       - image_data:/app/images
 
-  # Video worker (ffmpeg isolated in the container)
+  # Video pipeline (DA-2): one service per stage, chained through their queues.
+  # Effects stage and pipeline entry point (video_queue); ffmpeg in the container
   video_tool:
     build:
       context: ./Tools
@@ -260,6 +261,21 @@ services:
     restart: on-failure
     environment:
       VIDEO_PREVIEW_SECONDS: 3
+    networks:
+      - elk
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    volumes:
+      - image_data:/app/images
+
+  # Captions stage (video_subtitles_queue): the speech model lives only here
+  video_subtitles_tool:
+    build:
+      context: ./Tools
+      dockerfile: video_subtitles/Dockerfile
+    restart: on-failure
+    environment:
       WHISPER_MODEL: small
       WHISPER_CACHE_DIR: /models/whisper
       WHISPER_CPU_THREADS: 2
@@ -271,6 +287,20 @@ services:
     volumes:
       - image_data:/app/images
       - whisper_models:/models/whisper
+
+  # Frame extraction stage (video_frames_queue)
+  video_frames_tool:
+    build:
+      context: ./Tools
+      dockerfile: video_frames/Dockerfile
+    restart: on-failure
+    networks:
+      - elk
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    volumes:
+      - image_data:/app/images
 
   border_tool:
     build:

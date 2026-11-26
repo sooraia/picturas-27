@@ -323,6 +323,32 @@ router.delete("/:user/:project/process", auth.checkToken, (req, res) => {
 
 
 /**
+ * Get the project's current processing run (running, total and done steps)
+ * @body Empty
+ * @returns { running, completed, activeToken, total, done }
+ */
+router.get(
+  "/:user/:project/process/status",
+  auth.checkToken,
+  function (req, res, next) {
+    const ownerId = req.query.owner || req.params.user;
+    const callerId = req.authUserId || req.params.user;
+
+    axios
+      .get(projectsURL + `${ownerId}/${req.params.project}/process/status`, {
+        httpsAgent,
+        params: req.query.share ? { share: req.query.share } : undefined,
+        headers: {
+          Authorization: req.headers["authorization"],
+          "X-Caller-Id": callerId,
+        },
+      })
+      .then((resp) => res.status(200).send(resp.data))
+      .catch((err) => forwardAxiosError(res, err, "Error acquiring processing status"));
+  }
+);
+
+/**
  * Get project's processment result
  * @body Empty
  * @returns The required results, sent as [{img_id, img_name, url}]

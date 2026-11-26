@@ -36,7 +36,9 @@ Behind the gateway:
   - AI tools: `bg_remove_ai`, `cut_ai`, `expand_ai` (uses `generative-mock/`), `obj_ai`,
     `people_ai`, `text_ai`, `upgrade_ai`.
   - `Tools/utils/`: shared RabbitMQ, image I/O and message helpers.
-  - `Tools/video/` (`video_tool`): the single video worker, see below.
+  - Video pipeline, one service per stage (see below): `Tools/video/` (`video_tool`,
+    effects and entry point), `Tools/video_subtitles/` (`video_subtitles_tool`),
+    `Tools/video_frames/` (`video_frames_tool`) and the shared `Tools/video_common/`.
 - `rabbitMQ/definitions.json`: queues, exchange and bindings.
 - `docker-compose.yaml`: the single source of truth for services and configuration.
 
@@ -45,11 +47,15 @@ Behind the gateway:
 - **Images**: `projects` sends one message per (image, tool) step and advances the chain when
   the tool replies on `project_queue`. Progress goes to the browser through `ws_queue`.
 - **Videos**: `projects` sends **one** message per video carrying the whole pipeline to
-  `video_queue`. The worker probes with ffprobe, decodes once, applies the frame effects
-  (`Tools/video/effects.py`, same PIL operations as the image tools), and encodes once to
-  MP4/H.264 + AAC, keeping the audio. It reports progress as `video-progress` events on
-  `ws_queue`, acks only at the end and leaves no partial output on failure. Preview mode
-  renders only the first `VIDEO_PREVIEW_SECONDS` (3 s).
+  `video_queue` and gets **one** reply. `video_tool` plans the stages
+  (`Tools/video_common/pipeline.py`): contiguous effects share one pass (probe, decode once,
+  frame effects from `Tools/video/effects.py`, same PIL operations as the image tools, encode
+  once to MP4/H.264 + AAC keeping the audio); captions and frame extraction run in their own
+  services. Each stage forwards the job to the next stage's queue (`video_subtitles_queue`,
+  `video_frames_queue`) through a work directory next to the output; the last stage replies on
+  `project_queue`. Progress is reported for the whole pipeline as `video-progress` events on
+  `ws_queue`; each stage acks only at its end and no partial output is left on failure.
+  Preview mode renders only the first `VIDEO_PREVIEW_SECONDS` (3 s).
 
 ### Media types
 
@@ -63,10 +69,10 @@ Behind the gateway:
   tools. Each effect on a video counts as one operation.
 - `subtitles` is video-only and project-wide (no `imgId`): Faster-Whisper CPU/int8
   detects the spoken language and burns captions into the MP4. No audio/speech is a no-op.
-  It runs as an ordered stage inside the existing video worker; contiguous ordinary
+  It runs as an ordered stage in `video_subtitles_tool`; contiguous ordinary
   effects still share one decode/encode pass. Models persist in `whisper_models`.
-- `extract_frames` is video-only and project-wide, terminal and unique. It reuses the
-  video worker: count (1–100) or interval, PNG/JPEG, max100 images per video. Full output
+- `extract_frames` is video-only and project-wide, terminal and unique. It runs in
+  `video_frames_tool`: count (1–100) or interval, PNG/JPEG, max100 images per video. Full output
   is a frame manifest; preview is a contact sheet across the edited timeline. The
   orchestrator saves each frame as a separate image Result with the source `img_id`
   and unique result ID/name. Register all batch Process records before dispatch.
@@ -86,7 +92,7 @@ Replacing an older (e.g. Phase 1) checkout: it shares the Compose project name `
 its volumes, whose S3 layout (one bucket per user) is incompatible. Run
 `docker compose down -v --remove-orphans` once before the first `up`.
 
-Video worker tests run on the host (needs ffmpeg/ffprobe on the PATH, no Docker):
+Video pipeline tests (all stages) run on the host (needs ffmpeg/ffprobe on the PATH, no Docker):
 
 ```bash
 cd Tools/video && python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt

@@ -4,8 +4,14 @@ import sys
 
 import pytest
 
-# allows "import effects" / "import video_processor" as in the container
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+# allows "import effects" / "import video_processor" as in the container, plus
+# the shared video_common package and the captions and frame extraction stage
+# services (DA-2), so the pipeline tests cover every stage
+_here = os.path.dirname(__file__)
+# (inserted in reverse, so the service directory comes first and "video" is
+# this module, not the Tools/video package)
+for _path in ("../../video_frames", "../../video_subtitles", "../..", ".."):
+    sys.path.insert(0, os.path.abspath(os.path.join(_here, _path)))
 
 
 def make_video(path, seconds=4, size="320x240", fps=25, audio=True, vcodec="libx264"):
