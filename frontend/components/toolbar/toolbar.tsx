@@ -16,7 +16,7 @@ import TextAITool from "./text-ai-tool";
 import UpgradeAITool from "./upgrade-ai-tool";
 import { useClearProjectTools } from "@/lib/mutations/projects";
 import { useSession } from "@/providers/session-provider";
-import { useProjectInfo } from "@/providers/project-provider";
+import { useProjectInfo, useProjectProcessing } from "@/providers/project-provider";
 import { Button } from "../ui/button";
 import { AppliedToolsList } from "./applied-tools-list";
 import {
@@ -47,6 +47,7 @@ export function Toolbar() {
 
   const project = useProjectInfo();
   const session = useSession();
+  const processing = useProjectProcessing();
 
   // Projects with videos only show the effects the video worker supports
   // (AI tools and watermark are image-only) and only when a media item is selected
@@ -102,7 +103,7 @@ export function Toolbar() {
           <Button
             variant="outline"
             className="text-red-400 size-8"
-            disabled={project.tools.length === 0}
+            disabled={processing || project.tools.length === 0}
           >
             <Eraser />
           </Button>
