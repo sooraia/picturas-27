@@ -3,7 +3,7 @@
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { SortableContext, arrayMove, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { SortableToolItem } from "./sortable-tool-item";
-import { useProjectInfo, useSetProjectTools, useCurrentImage } from "@/providers/project-provider";
+import { useProjectInfo, useSetProjectTools, useCurrentImage, useProjectProcessing } from "@/providers/project-provider";
 import { useSession } from "@/providers/session-provider";
 import {
   useReorderProjectTools,
@@ -65,6 +65,9 @@ export function AppliedToolsList() {
 
   const tools = project.tools;
 
+  // DA-1: a pipeline não pode ser alterada enquanto está a ser processada
+  const processing = useProjectProcessing();
+
   const currentImage = useCurrentImage();
   const imageId = currentImage?._id;
 
@@ -86,6 +89,7 @@ export function AppliedToolsList() {
 
   function handleDragEnd(event: any) {
     const { active, over } = event;
+    if (processing) return;
     if (!over || active.id === over.id) return;
 
     const oldIndex = tools.findIndex((t) => t._id === active.id);
@@ -131,6 +135,7 @@ export function AppliedToolsList() {
   }
 
   function handleRemove(id: string) {
+    if (processing) return;
     const opId = crypto.randomUUID();
     deleteTool.mutate(
       {
@@ -159,6 +164,7 @@ export function AppliedToolsList() {
   }
 
   function handleUndo() {
+    if (processing) return;
     if (tools.length === 0) {
       toast({
         title: "Nada para reverter",
@@ -201,6 +207,7 @@ export function AppliedToolsList() {
   }
 
   function handleReset() {
+    if (processing) return;
     if (tools.length === 0) {
       toast({
         title: "Nada para limpar",
@@ -245,7 +252,7 @@ export function AppliedToolsList() {
             size="icon"
             className="h-6 w-6"
             onClick={handleUndo}
-            disabled={tools.length === 0 || deleteTool.isPending}
+            disabled={processing || tools.length === 0 || deleteTool.isPending}
             title="Reverter última edição"
           >
             <Undo2 className="h-3 w-3" />
@@ -256,7 +263,7 @@ export function AppliedToolsList() {
             size="icon"
             className="h-6 w-6"
             onClick={handleReset}
-            disabled={tools.length === 0 || clearTools.isPending}
+            disabled={processing || tools.length === 0 || clearTools.isPending}
             title="Reset para versão original"
           >
             <RotateCcw className="h-3 w-3" />
@@ -274,7 +281,7 @@ export function AppliedToolsList() {
         <SortableContext items={tools.map((t) => t._id)} strategy={verticalListSortingStrategy}>
           <div className="flex max-h-40 flex-col gap-1 overflow-y-auto">
             {tools.map((tool) => (
-              <SortableToolItem key={tool._id} tool={tool} onRemove={handleRemove} />
+              <SortableToolItem key={tool._id} tool={tool} onRemove={handleRemove} disabled={processing} />
             ))}
           </div>
         </SortableContext>
